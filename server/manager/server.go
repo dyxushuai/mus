@@ -7,17 +7,32 @@ import (
 	"sync"
 )
 
+//server state
 const (
 	NULL int = iota
 	RUN
 	STOP
 )
 
+//some command
+type Command int
+const (
+	NIL Command = iota
+	WAIT
+	OPEN
+	CLOSE
+)
+type ComChan chan Command
+var theNumOfCom int = 10
+
+
+
 type server struct {
-	sync.Mutex
+	*sync.Mutex
 	net.Listener
 	port string
 	state int
+	comChan ComChan
 	local map[string]*local //1 to 1 : user.username -> local, username must be uniqueness
 }
 
@@ -34,7 +49,8 @@ func newServer(port string) (ss *server,err error) {
 		err =  err
 		return
 	}
-	ss = &server{sync.Mutex{}, ln, port, STOP, nil}
+
+	ss = &server{&sync.Mutex{}, ln, port, STOP, make(ComChan, theNumOfCom),nil}
 	return
 }
 
@@ -52,6 +68,11 @@ func (self *server) addLocal(user *User) (local *local, err error) {
 }
 
 func (self *server) close() (err error) {
+	//first stop the loop
+	//second close the chan
+	//third close the listener
+	self.comChan <- CLOSE
+	close(self.comChan)
 	err = self.Close()
 	return
 }
@@ -68,12 +89,26 @@ func (self *server) run() (err error) {
 	self.state = RUN
 
 	defer func() {
-		err = newError("Server at port: " + self.port + "unexpected stop")
+		err = newError("Server at port: " + self.port + " stoped")
 		self.state = STOP
 	}()
-
+loop:
 	for {
 		//listen the connect from client
+		select{
+		case com := <- self.comChan:
+			switch com {
+			case WAIT:
+				if self.state != STOP {
+					self.state = STOP
+				}
+				continue
+			case CLOSE:
+				break loop
+			}
+		default:
+		}
+
 		var conn net.Conn
 		conn, err = self.Accept()
 		if err != nil {

@@ -10,33 +10,33 @@ import (
 )
 
 
-//some command
-type Command int
 
-//const (
-//	NULL Command = iota
-//	WAIT Command
-//	OPEN Command
-//	CLOSE Command
-//)
-//default commands channel with 10 maximum
-//var maxOfSS chan map[string]Command
-
-
-
+var theNumOfErr int = 10
 
 type Manager struct {
-	errChan chan error
-	sync.Mutex
+	*sync.Mutex
+	errChan chan error//error message channel
 	ssServers map[string]*server //port -> ss server
 }
 
 func CreateManager() (manager *Manager) {
 	//default create a chan to receive error message
-	errChan := make(chan error, 10)
+
+	errChan := make(chan error, theNumOfErr)
 	manager = &Manager{}
 	manager.errChan = errChan
+	go manager.LogError()
 	return
+}
+
+//this function is for log all of error message
+func (self *Manager) LogError() {
+	for {
+		select {
+		case e := <- self.errChan:
+			log.Println(e)
+		}
+	}
 }
 
 //private method for Manager instance
@@ -73,7 +73,6 @@ func (self *Manager) AddServer(port string) (err error) {
 	ss, err = newServer(port)
 
 	if err != nil {
-		log.Printf("Create new server for ss at port: %s failed, err: %v\n", port, err)
 		return
 	}
 
@@ -82,14 +81,14 @@ func (self *Manager) AddServer(port string) (err error) {
 		self.ssServers[port] = ss
 		self.Unlock()
 	} else {
-		return newError("Application has listened this port " + port)
+		err = newError("Application has listened this port " + port)
 	}
-	return nil
+	return
 }
 
 func (self *Manager) runServer(port string) (err error) {
 	if !self.hasServer(port) {
-		err = newError("No server listen on port: " + port)
+		err = newError("No server listen on the port: " + port)
 		return
 	}
 	go func() {
@@ -99,10 +98,26 @@ func (self *Manager) runServer(port string) (err error) {
 	return
 }
 
+func (self *Manager) StartServer(port string) (err error) {
+	if !self.hasServer(port) {
+		err = newError("No server Listen on the port: " + port)
+		return
+	}
+}
+
+func (self *Manager) StopServer(port string) (err error) {
+	if !self.hasServer(port) {
+		err = newError("No server Listen on the port: " + port)
+		return
+	}
+	self.ssServers[port].comChan <- WAIT
+	return
+}
+
 //drop a existed listener
 func (self *Manager) DropServer(port string) (err error) {
 	if !self.hasServer(port) {
-		err = newError(port + " server, drop failed")
+		err = newError("No server Listen on the port: " + port)
 		return
 	}
 	//cannot delete the server which close failed
