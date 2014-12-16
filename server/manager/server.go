@@ -4,57 +4,78 @@ package manager
 import (
 	"net"
 	"log"
+	"sync"
+)
+
+const (
+	NULL int = iota
+	RUN
+	STOP
 )
 
 type server struct {
+	sync.Mutex
+	net.Listener
 	port string
-	listener net.Listener
-	local map[string]*local //1 to 1 : user.username -> client, username must uniqueness
+	state int
+	local map[string]*local //1 to 1 : user.username -> local, username must be uniqueness
 }
 
-func newServer(port string) (server *server,err error) {
+func newServer(port string) (ss *server,err error) {
 	if port == "" {
 		err = newError("Cannot create a server without port")
+		return
 	}
-	if ln, err := net.Listen("tcp", ":" + port); err != nil {
+
+	ln, err := net.Listen("tcp", ":" + port)
+
+	if err != nil {
 		log.Printf("Create new server for ss at port: %s failed, err: %v\n", port, err)
 		err =  err
-	} else {
-		server.port = port
-		server.listener = ln
+		return
 	}
+	ss = &server{sync.Mutex{}, ln, port, STOP, nil}
 	return
 }
 
-//check this user is connect
-func (self *server) hasLocal(user *User) bool {
-	_, ok := self.local[user.username]
-	return ok
-}
 
 func (self *server) addLocal(user *User) (local *local, err error) {
-	if self.hasLocal(user) {
-		//TODO: add contact method
-		err = newError("Account is using, please contact the administrator")
-	}
+
 	local, err = newLocal(user)
 	if err != nil {
 		return
 	}
+	self.Lock()
 	self.local[user.username] = local
+	self.Unlock()
 	return
 }
 
 func (self *server) close() (err error) {
-	err = self.listener.Close()
+	err = self.Close()
 	return
 }
 
+func (self *server) isRun() bool {
+	return self.state == RUN
+}
+
 func (self *server) run() (err error) {
+	if self.isRun() {
+		err = newError("Server at port: " + self.port + "is running")
+		return
+	}
+	self.state = RUN
+
+	defer func() {
+		err = newError("Server at port: " + self.port + "unexpected stop")
+		self.state = STOP
+	}()
+
 	for {
 		//listen the connect from client
 		var conn net.Conn
-		conn, err = self.listener.Accept()
+		conn, err = self.Accept()
 		if err != nil {
 			log.Printf("accept error: %v\n", err)
 			continue
@@ -81,6 +102,7 @@ func (self *server) run() (err error) {
 			conn.Close()
 			continue
 		}
+
 		go local.run()
 	}
 	return
