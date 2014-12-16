@@ -1,12 +1,19 @@
 package main
 
 import (
-	"fmt"
 	"net"
-)
 
+)
+type A struct {
+	ax, ay int
+}
+
+type B struct {
+	A
+	bx, by float64
+}
 func main() {
-	maxOfSS := make(map[string]chan int, 2)
-	fmt.Println(maxOfSS[0])
-	net.Listen("tcp", ":8044")
+	conn, _ := net.Dial("tcp", "127.0.0.1:8080")
+	conn.Close()
+
 }

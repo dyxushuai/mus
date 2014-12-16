@@ -13,6 +13,7 @@ type User struct {
 	username      string
 	password      string
 	method        string
+	timeout 	  int
 	currentFlow   float64
 	limit		  float64
 	conn          net.Conn
@@ -22,6 +23,11 @@ type User struct {
 func (self *User) cipher() (*ss.Cipher, error) {
 	return ss.NewCipher(self.method, self.password)
 }
+
+func (self *User) addFlow(size int) (err error) {
+	return nil
+}
+
 
 func getUserFormConn(conn net.Conn) (user *User, err error) {
 	const (
@@ -45,7 +51,8 @@ func getUserFormConn(conn net.Conn) (user *User, err error) {
 	if _, err = io.ReadFull(conn, username); err != nil {
 		return
 	}
-	user, err = storage.Get("user:" + string(username))
+//	user, err = storage.Get("user:" + string(username))
+
 	return
 
 }
