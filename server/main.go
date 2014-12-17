@@ -1,11 +1,9 @@
 package main
 
 import (
-//"fmt"
-//	"github.com/JohnSmithX/mus/server/manager"
+"fmt"
 
 
-	"log"
 )
 type A struct {
 	ax, ay int
@@ -21,23 +19,6 @@ type B struct {
 	bx, by float64
 }
 func main() {
-	a := make(chan int)
-	go func() {
-		for {
-			select{
-			case com := <- a:
-				switch com {
-				case 1:
-//					continue
-				}
-			}
-			log.Println("here")
-		}
-	}()
-
-	for {
-		a <- 1
-	}
-
-
+	a := A{}
+	fmt.Println(int(&a))
 }

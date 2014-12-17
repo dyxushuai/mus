@@ -14,16 +14,6 @@ const (
 	STOP
 )
 
-//some command
-type Command int
-const (
-	NIL Command = iota
-	WAIT
-	OPEN
-	CLOSE
-)
-type ComChan chan Command
-var theNumOfCom int = 10
 
 
 
@@ -77,12 +67,20 @@ func (self *server) close() (err error) {
 	return
 }
 
-func (self *server) isRun() bool {
+func (self *server) isRUN() bool {
 	return self.state == RUN
 }
 
+func (self *server) isSTOP() bool {
+	return self.state == STOP
+}
+
+func (self *server) isNULL() bool {
+	return self.state == NULL
+}
+
 func (self *server) run() (err error) {
-	if self.isRun() {
+	if self.isNULL() || self.isSTOP() {
 		err = newError("Server at port: " + self.port + "is running")
 		return
 	}
@@ -94,15 +92,24 @@ func (self *server) run() (err error) {
 	}()
 loop:
 	for {
-		//listen the connect from client
+		go func() {
+			if err != nil {
+				msgChan <- err
+			}
+		}()
+
 		select{
 		case com := <- self.comChan:
 			switch com {
 			case WAIT:
-				if self.state != STOP {
+				if !self.isSTOP() {
 					self.state = STOP
 				}
 				continue
+			case START:
+				if !self.isRUN() {
+					self.state = RUN
+				}
 			case CLOSE:
 				break loop
 			}
