@@ -1,6 +1,6 @@
 //users info
 
-package manager
+package models
 
 import (
 	"io"
@@ -30,8 +30,6 @@ func (self *User) addFlow(size int) (err error) {
 
 
 func getUserFormConn(conn net.Conn) (user *User, err error) {
-	//get user form db
-	//check if overflow
 	const (
 		idVersion = 0 // \x01
 		version   = 1

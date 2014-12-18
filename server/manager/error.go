@@ -4,8 +4,8 @@ package manager
 
 import (
 	"time"
+	"fmt"
 )
-
 
 
 type errorType struct {
@@ -14,12 +14,16 @@ type errorType struct {
 }
 
 func (err *errorType) Error() string {
-	return err.etime.String() + ":" + err.s
+	return "[Err]" + err.etime.Format("2006-01-02 15:04:05") + ":" + err.s
 }
 
-func newError(s string) error {
+func newError(format string, a ...interface{}) error {
+
+	var errStr string
+	errStr = fmt.Sprintf(format, a...)
 	return &errorType{
 		etime: time.Now(),
-		s: s,
+		s: errStr,
 	}
 }
+

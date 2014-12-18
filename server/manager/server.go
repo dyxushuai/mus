@@ -3,8 +3,9 @@ package manager
 
 import (
 	"net"
-	"log"
 	"sync"
+	"fmt"
+
 )
 
 //server state
@@ -14,33 +15,37 @@ const (
 	STOP
 )
 
-
-
-
 type server struct {
-	*sync.Mutex
+	sync.Mutex
 	net.Listener
 	port string
 	state int
 	comChan ComChan
 	local map[string]*local //1 to 1 : user.username -> local, username must be uniqueness
+	errFormat string
 }
 
+const (
+	serverErrFormat string = "Shawdowsocks at port %s : %%s %%v"
+)
+
+
 func newServer(port string) (ss *server,err error) {
+
 	if port == "" {
 		err = newError("Cannot create a server without port")
 		return
 	}
 
-	ln, err := net.Listen("tcp", ":" + port)
+	errFormat := fmt.Sprintf(serverErrFormat, port)
 
-	if err != nil {
-		log.Printf("Create new server for ss at port: %s failed, err: %v\n", port, err)
-		err =  err
+	ln, er := net.Listen("tcp", ":" + port)
+	if er != nil {
+		err = newError(errFormat, "create listner error:", er)
 		return
 	}
 
-	ss = &server{&sync.Mutex{}, ln, port, STOP, make(ComChan, theNumOfCom),nil}
+	ss = &server{sync.Mutex{}, ln, port, STOP, make(ComChan, theNumOfCom), nil, errFormat}
 	return
 }
 
@@ -63,7 +68,9 @@ func (self *server) close() (err error) {
 	//third close the listener
 	self.comChan <- CLOSE
 	close(self.comChan)
-	err = self.Close()
+	if er := self.Close(); er != nil {
+		err = newError(self.errFormat, "close with error:", er)
+	}
 	return
 }
 
@@ -79,25 +86,22 @@ func (self *server) isNULL() bool {
 	return self.state == NULL
 }
 
-func (self *server) run() (err error) {
-	if self.isNULL() || self.isSTOP() {
-		err = newError("Server at port: " + self.port + "is running")
-		return
-	}
+func (self *server) listen() (err error) {
+//	if !self.isNULL() {
+//		err = newError(self.errFormat, "has exist", "")
+//		return
+//	}
 	self.state = RUN
 
 	defer func() {
-		err = newError("Server at port: " + self.port + " stoped")
+		err = newError(self.errFormat, "has stoped", "")
 		self.state = STOP
 	}()
 loop:
 	for {
-		go func() {
-			if err != nil {
-				msgChan <- err
-			}
-		}()
-
+		if err != nil {
+			bd.addError(err)
+		}
 		select{
 		case com := <- self.comChan:
 			switch com {
@@ -116,36 +120,39 @@ loop:
 		default:
 		}
 
-		var conn net.Conn
-		conn, err = self.Accept()
-		if err != nil {
-			log.Printf("accept error: %v\n", err)
+		conn, er := self.Accept()
+		if er != nil {
+			err = newError(self.errFormat, "listener accpet error:", er)
 			continue
 		}
 
-		var user *User
-		user, err = getUserFormConn(conn)
-		if err != nil {
-			log.Printf("Error get passeoed: %s %v\n", self.port, err)
-			conn.Close()
-			continue
-		}
-
-		if user.currentFlow < user.limit {
-			log.Printf("Error user runover: %s\n", user.limit)
-			conn.Close()
-			continue
-		}
-		//create new client and return
-		var local *local
-		local, err = self.addLocal(user)
-		if err != nil {
-			log.Printf("Add client failed: %s %v\n", self.port, err)
-			conn.Close()
-			continue
-		}
-
-		go local.run()
+		go self.handleConnect(conn)
 	}
 	return
+}
+
+func(self *server) handleConnect(conn net.Conn) {
+
+	defer func() {
+		if err := recover(); err!=nil {
+			if v, ok := err.(error); ok {
+				fmt.Println(v)
+				conn.Write([]byte(v.Error()))
+				conn.Close()
+			}
+
+		}
+	}()
+
+	user, er := getUserFormConn(conn)
+	if er != nil {
+		panic(newError(self.errFormat, "get user error:", er))
+	}
+	//create new client and return
+	local, er := self.addLocal(user)
+	if er != nil {
+		panic(newError(self.errFormat, "create connect error:", er))
+	}
+	local.run()
+
 }

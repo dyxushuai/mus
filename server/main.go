@@ -1,24 +1,11 @@
 package main
 
 import (
-"fmt"
-
-
+	"github.com/JohnSmithX/mus/server/manager"
 )
-type A struct {
-	ax, ay int
-}
 
-const (
-	a int = iota
-	b
-	c
-)
-type B struct {
-	A
-	bx, by float64
-}
 func main() {
-	a := A{}
-	fmt.Println(int(&a))
+	m := manager.CreateManager()
+	m.AddServerAndRun("9090")
+	m.DEBUG()
 }

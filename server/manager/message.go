@@ -3,6 +3,3 @@
 */
 package manager
 
-type message interface {
-
-}

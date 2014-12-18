@@ -186,7 +186,6 @@ func (self *local) run() (err error) {
 	defer func() {
 		if !closed {
 			self.client.Close()
-			self.remote.Close()
 		}
 	}()
 
@@ -197,7 +196,7 @@ func (self *local) run() (err error) {
 		self.remoteToClient()
 		closed = true
 	} else {
-		return newError("Its not a http request")
+		err = newError("User: %s request a non-http method", self.client.user.username)
 	}
 	return
 }
@@ -254,13 +253,12 @@ func pipeThenClose(src, dst conn) (total int, raw_header []byte) {
 					is_end = true
 				}
 			}
-
 			size, err = dst.Write(buf[0:n])
-			total += size
 			if err != nil {
 				ss.Debug.Println("write:", err)
 				break
 			}
+			total += size
 		}
 		if err != nil || n == 0 {
 			//==
