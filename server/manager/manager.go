@@ -4,7 +4,7 @@ package manager
 
 import (
 	"sync"
-	"fmt"
+//	"fmt"
 )
 
 type Manager struct {
@@ -13,16 +13,7 @@ type Manager struct {
 }
 
 
-//some command
-type Command int
-const (
-	NIL Command = iota
-	WAIT
-	START
-	CLOSE
-)
-type ComChan chan Command
-var theNumOfCom int = 10
+
 //broadcast
 var bd = NewBroadcast()
 
@@ -45,7 +36,8 @@ func (self *Manager) hasServer(port string) bool {
 
 func (self *Manager) getServer(port string) (ss *server, err error) {
 	if !self.hasServer(port) {
-		err = newError("No server listen on the port: %s", port)
+		err = newError("Thers is no proxy server listened on the port: %s", port)
+		bd.addError(err)
 		return
 	}
 	ss = self.ssServers[port]
@@ -54,37 +46,46 @@ func (self *Manager) getServer(port string) (ss *server, err error) {
 
 
 
-func (self *Manager) runServer(port string) (err error) {
-	var ss *server
-	ss, err = self.getServer(port)
-	if err != nil {
+func (self *Manager) StartServer(port string) (err error) {
+
+	if !self.hasServer(port) {
+		err = newError("Start proxy server failed: no server listen on port %s", port)
+		bd.addError(err)
 		return
 	}
-	go func() {
-		err = ss.listen()
-		if err != nil {
-			bd.addError(err)
-		}
-	}()
+	err = self.ssServers[port].start()
+	if err != nil {
+		bd.addError(err)
+	}
 	return
 }
 
-func (self *Manager) RunAllOfServer() (err []error) {
-	for port, _ := range self.ssServers {
-		er := self.runServer(port)
-		if er != nil {
-			err = append(err, er)
-		}
+//current proxy server list
+func (self *Manager) ServerList() []string {
+	var list []string
+	for k, _ := range self.ssServers {
+		list = append(list, k)
 	}
-	return
+	return list
 }
+
+////run all of proxy which hasn't started
+//func (self *Manager) RunAllOfServer() (err []error) {
+//	for port, _ := range self.ssServers {
+//		er := self.startServer(port)
+//		if er != nil {
+//			err = append(err, er)
+//		}
+//	}
+//	return
+//}
 
 func (self *Manager) AddServerAndRun(port string) (err error) {
 	err = self.AddServer(port)
 	if err != nil {
 		return
 	}
-	err = self.runServer(port)
+	err = self.StartServer(port)
 	return
 }
 
@@ -92,8 +93,10 @@ func (self *Manager) AddServerAndRun(port string) (err error) {
 //create a new listener with a given port
 //each listener with a new goroutine
 func (self *Manager) AddServer(port string) (err error) {
-	if _, er := self.getServer(port); er == nil {
-		err = newError("Shadowsocks at port: %s has existed", port)
+
+	if self.hasServer(port) {
+		err = newError("Add proxy server failed: proxy server has listened on port %s", port)
+		bd.addError(err)
 		return
 	}
 	ss, er := newServer(port)
@@ -109,22 +112,15 @@ func (self *Manager) AddServer(port string) (err error) {
 }
 
 
-func (self *Manager) StartServer(port string) (err error) {
-	ss, er := self.getServer(port)
-	if er != nil {
-		return
-	}
-	ss.comChan <- START
-	return
-}
 
+//stop a started server
 func (self *Manager) StopServer(port string) (err error) {
 	var ss *server
 	ss, err = self.getServer(port)
 	if err != nil {
 		return
 	}
-	ss.comChan <- WAIT
+	ss.stop()
 	return
 }
 
@@ -149,9 +145,26 @@ func (self *Manager) DropServer(port string) (err error) {
 
 func (self *Manager) DEBUG() {
 	for {
-		fmt.Println(<- bd.errChan)
+		select {
+		case err := <- bd.errChan:
+			if v, ok := err.(*errorType); ok {
+				v.print()
+			}
+		}
 	}
 }
 
+
+
+func (self *Manager) LOG() {
+	for {
+		select {
+		case msg := <- bd.msgChan:
+			if v, ok := msg.(log); ok {
+				v.print()
+			}
+		}
+	}
+}
 
 

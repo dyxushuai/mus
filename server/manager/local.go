@@ -9,10 +9,13 @@ import (
 	"encoding/binary"
 	"strconv"
 	"time"
-	"log"
 	"syscall"
 	"bytes"
+	"fmt"
 )
+
+
+
 
 type conn interface {
 	net.Conn
@@ -22,11 +25,13 @@ type conn interface {
 type local struct {
 	client *client
 	remote *remote
+	format string
 }
 
 type client struct {
 	*ss.Conn
 	user *User
+	father *local
 }
 
 
@@ -37,17 +42,23 @@ type remote struct {
 	port int
 	extra []byte //client request content
 	isHttp bool
+	father *local
+
 }
 
 //create a client and get remote
 func newLocal(user *User) (local *local, err error) {
-	var cipher *ss.Cipher
-	cipher, err = user.cipher()
+
+	format := fmt.Sprintf(localFormat, user.username)
+
+	cipher, err := user.cipher()
 	if err != nil {
+		err = newError(format, "get cipher error:", err)
 		return
 	}
-	local.client = &client{ss.NewConn(user.conn, cipher), user}
+	local.client = &client{ss.NewConn(user.conn, cipher), user, local}
 	local.remote, err = local.client.getRemote()
+	local.format = format
 	return
 }
 
@@ -55,6 +66,7 @@ func (self *client) setTimeOut() (err error) {
 	if self.user.timeout != 0 {
 		readTimeout := time.Duration(self.user.timeout) * time.Second
 		err = self.SetReadDeadline(time.Now().Add(readTimeout))
+		err = newError(self.father.format, "client set timeout error:", err)
 	}
 	return
 }
@@ -111,10 +123,12 @@ func (self *client) getRemote() (rt *remote, err error) {
 	// request size (when addrType is 3, domain name has at most 256 bytes)
 	// 1(addrType) + 1(lenByte) + 256(max length address) + 2(port)
 	buf := make([]byte, 260)
-	var n int
+
 	// read till we get possible domain length field
 	self.setTimeOut()
-	if n, err = io.ReadAtLeast(self, buf, idDmLen+1); err != nil {
+	n, err := io.ReadAtLeast(self, buf, idDmLen+1)
+	if err != nil {
+		err = newError(self.father.format, "read domain form client error:", err)
 		return
 	}
 
@@ -127,12 +141,13 @@ func (self *client) getRemote() (rt *remote, err error) {
 	case typeDm:
 		reqLen = int(buf[idDmLen]) + lenDmBase
 	default:
-		err = newError("addr type %d not supported" + string(buf[idType]))
+		err = newError(self.father.format, "addr type not supported", string(buf[idType]))
 		return
 	}
 	if n < reqLen { // rare case
 		self.setTimeOut()
 		if _, err = io.ReadFull(self, buf[n:reqLen]); err != nil {
+			err = newError(self.father.format, "read addr form client error:", err)
 			return
 		}
 	} else if n > reqLen {
@@ -154,25 +169,22 @@ func (self *client) getRemote() (rt *remote, err error) {
 	// parse port
 	port = int(binary.BigEndian.Uint16(buf[reqLen-2 : reqLen]))
 	host = net.JoinHostPort(ip, strconv.Itoa(port))
-	if err != nil {
-		return
-	}
 	// tcp to remote
-	var conn net.Conn
-	conn, err = net.Dial("tcp", host)
 
+
+	conn, err := net.Dial("tcp", host)
 	if err != nil {
 		if ne, ok := err.(*net.OpError); ok && (ne.Err == syscall.EMFILE || ne.Err == syscall.ENFILE) {
 			// log too many open file error
 			// EMFILE is process reaches open file limits, ENFILE is system limit
-			log.Println("dial error:", err)
+			err = newError(self.father.format, "dial error:", err)
 		} else {
-			log.Println("error connecting to:", host, err)
+			err = newError(self.father.format, "error connecting to: " + host, err)
 		}
 		return
 	}
 
-	rt = &remote{conn, host, ip, port, extra, false}
+	rt = &remote{conn, host, ip, port, extra, false, self.father}
 	return
 }
 
@@ -196,7 +208,7 @@ func (self *local) run() (err error) {
 		self.remoteToClient()
 		closed = true
 	} else {
-		err = newError("User: %s request a non-http method", self.client.user.username)
+		err = newError(self.format, "request a non-http method", "")
 	}
 	return
 }
@@ -234,7 +246,6 @@ func pipeThenClose(src, dst conn) (total int, raw_header []byte) {
 
 	buf := pipeBuf.Get()
 	defer pipeBuf.Put(buf)
-
 	var buffer = bytes.NewBuffer(nil)
 	var is_end = false
 	var size int

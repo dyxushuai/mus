@@ -6,15 +6,21 @@
 package manager
 
 
-const (
-	numOfErr int = 100
-	numOfMsg int = 100
-)
-
 
 type message interface {
 }
 
+type Broadcast struct {
+	errChan chan error
+	msgChan chan message
+}
+
+func NewBroadcast() (bd *Broadcast) {
+	bd = &Broadcast{}
+	bd.errChan = make(chan error, numOfErr)
+	bd.msgChan = make(chan message, numOfMsg)
+	return
+}
 
 
 func (self *Broadcast) addError(err error) {
@@ -29,16 +35,4 @@ func (self *Broadcast) addMsg(msg message) {
 	case self.msgChan <- msg:
 	default://avoid bloc with default
 	}
-}
-
-type Broadcast struct {
-	errChan chan error
-	msgChan chan message
-}
-
-func NewBroadcast() (bd *Broadcast) {
-	bd = &Broadcast{}
-	bd.errChan = make(chan error, numOfErr)
-	bd.msgChan = make(chan message, numOfMsg)
-	return
 }

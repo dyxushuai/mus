@@ -13,8 +13,12 @@ type errorType struct {
 	s string //error content
 }
 
-func (err *errorType) Error() string {
-	return "[Err]" + err.etime.Format("2006-01-02 15:04:05") + ":" + err.s
+func (self *errorType) Error() string {
+	return self.s
+}
+
+func (self *errorType) print() {
+	fmt.Println(fmt.Sprintf("[err] %s: %s", self.etime.Format("2006-01-02 15:04:05.999999999"), self.s))
 }
 
 func newError(format string, a ...interface{}) error {

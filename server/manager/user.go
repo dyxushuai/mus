@@ -3,9 +3,9 @@
 package manager
 
 import (
-	"io"
 	"net"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
+	"io"
 )
 
 
@@ -28,6 +28,18 @@ func (self *User) addFlow(size int) (err error) {
 	return nil
 }
 
+//func getUserFormConn(conn net.Conn) (u *User, err error)  {
+//	u = &User{}
+//	u.username = "xus"
+//	u.password = "123"
+//	u.method = "table"
+//	u.timeout = 600
+//	u.currentFlow = 15000000
+//	u.limit = 20000000
+//	u.conn = conn
+//	return
+//
+//}
 
 func getUserFormConn(conn net.Conn) (user *User, err error) {
 	//get user form db
@@ -45,7 +57,7 @@ func getUserFormConn(conn net.Conn) (user *User, err error) {
 	case version:
 		break
 	default:
-		err = newError("version %s not supported" + string(buf[idVersion]))
+		err = newError("version %s not supported ", string(buf[idVersion]))
 		return
 	}
 	userLen := buf[idUser]
@@ -58,5 +70,4 @@ func getUserFormConn(conn net.Conn) (user *User, err error) {
 	return
 
 }
-
 

@@ -2,13 +2,17 @@ package main
 
 import (
 	"fmt"
+
 )
+func foo() (e int) {
 
-type a struct {
+	a , e, w := 4, 6, 7
 
+	fmt.Println(a)
+	return
 }
 
-func New() {
-	fmt.Println("test")
+func main() {
+	fmt.Println(foo())
 }
 
