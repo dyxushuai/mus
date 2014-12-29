@@ -5,6 +5,8 @@ import (
 	"net"
 	"sync"
 	"fmt"
+	"strings"
+	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
 
@@ -21,18 +23,20 @@ type server struct {
 	sync.Mutex
 	net.Listener
 	port string //be used as id
-	state int
 	comChan ComChan //command channel
-	local map[string]*local //1 to 1 : user.username -> local, username must be uniqueness
+	local map[string]*local //1 to 1 : remote addr -> local
 	format string
 	started bool
+	method string //encrypt method
+	password string //secret key
+	cipher *ss.Cipher
+	timeout int64
 }
 
 
 
 
-
-func newServer(port string) (ss *server,err error) {
+func newServer(port, method, password string, timeout int64) (sserver *server,err error) {
 
 	if port == "" {
 		err = newError("Cannot create a server without port")
@@ -45,21 +49,36 @@ func newServer(port string) (ss *server,err error) {
 		err = newError(errFormat, "create listner error:", err)
 		return
 	}
-	ss = &server{sync.Mutex{}, ln, port, NULL, make(ComChan, serverCommand), nil, errFormat, false}
+
+	cipher, err := ss.NewCipher(method, password)
+	if err != nil {
+		err = newError(errFormat, "create cipher error:", err)
+		return
+	}
+
+	sserver = &server{sync.Mutex{}, ln, port, make(ComChan, serverCommand), make(map[string]*local), errFormat, false, method, password, cipher, timeout}
 	return
 }
 
 
-func (self *server) addLocal(user *User) (local *local, err error) {
+func (self *server) addLocal(conn net.Conn) (local *local, err error) {
 
-	local, err = newLocal(user)
+	cipher := self.cipher.Copy()
+	ssconn := ss.NewConn(conn, cipher)
+
+	local, err = newLocal(self, ssconn)
 	if err != nil {
 		err = newError(self.format, "create local error:", err)
 		return
 	}
+
 	self.Lock()
-	self.local[user.username] = local
-	self.Unlock()
+	defer func () {
+		self.Unlock()
+	}()
+	ip := strings.Split(conn.RemoteAddr().String(), ":")[0]
+	self.local[ip] = local
+
 	return
 }
 
@@ -130,7 +149,6 @@ loop:
 		}
 
 		conn, err := self.Accept()
-
 		if err != nil {
 			err = newError(self.format, "listener accpet error:", err)
 			continue
@@ -148,27 +166,18 @@ loop:
 
 func(self *server) handleConnect(conn net.Conn) (err error) {
 
-	defer func() {
-		if err := recover(); err!=nil {
-			if v, ok := err.(error); ok {
-				conn.Write([]byte(v.Error()))
-				conn.Close()
-			}
-		}
+	defer func () {
+		conn.Close()
 	}()
 
-	user, err := getUserFormConn(conn)
+	local, err := self.addLocal(conn)
+
 	if err != nil {
-		panic(newError(self.format, "get user error:", err))
-	}
-	//create new client and return
-	local, err := self.addLocal(user)
-	if err != nil {
-		panic(newError(self.format, "create connect error:", err))
+		return
 	}
 	err = local.run()
 	if err != nil {
-		panic(newError(self.format, "create connect error:", err))
+		return
 	}
 	return
 }

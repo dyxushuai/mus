@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
+	"github.com/segmentio/go-log"
 )
 
-//func New() {
-//	fmt.Println("test1")
-//}
+func main() {
+	log.Log.New("sds")
+}

@@ -1,23 +1,27 @@
 package main
 
 import (
-	"github.com/squiidz/bone"
+	"github.com/ant0ine/go-json-rest/rest"
 	"net/http"
-	"fmt"
+	"log"
 )
 
 
-type Home struct {
-
-}
-
-func (self *Home) ServeHTTP(rw http.ResponseWriter,rq *http.Request) {
-	fmt.Println(rw, rq)
+type Message struct {
+	Body string
 }
 
 func main() {
-	home := &Home{}
-	mux := bone.New()
-	mux.Get("/", home)
-	http.ListenAndServe(":2444", mux)
+	handler := rest.ResourceHandler{}
+	err := handler.SetRoutes(
+	&rest.Route{"GET", "/message", func(w rest.ResponseWriter, req *rest.Request) {
+		w.WriteJson(&Message{
+		Body: "Hello World!",
+	})
+	}},
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(http.ListenAndServe(":8080", &handler))
 }

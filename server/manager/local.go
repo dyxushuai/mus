@@ -15,8 +15,6 @@ import (
 )
 
 
-
-
 type conn interface {
 	net.Conn
 	setTimeOut() error
@@ -26,11 +24,11 @@ type local struct {
 	client *client
 	remote *remote
 	format string
+	father *server
 }
 
 type client struct {
 	*ss.Conn
-	user *User
 	father *local
 }
 
@@ -47,29 +45,30 @@ type remote struct {
 }
 
 //create a client and get remote
-func newLocal(user *User) (local *local, err error) {
+func newLocal(sserver *server,conn *ss.Conn) (l *local, err error) {
 
-	format := fmt.Sprintf(localFormat, user.username)
+	format := fmt.Sprintf(localFormat, conn.RemoteAddr())
 
-	cipher, err := user.cipher()
-	if err != nil {
-		err = newError(format, "get cipher error:", err)
-		return
-	}
-	local.client = &client{ss.NewConn(user.conn, cipher), user, local}
-	local.remote, err = local.client.getRemote()
-	local.format = format
+	l = new(local)
+
+	l.format = format
+	l.father = sserver
+	l.client = &client{conn, l}
+
+	l.remote, err = l.client.getRemote()
+
 	return
 }
 
 func (self *client) setTimeOut() (err error) {
-	if self.user.timeout != 0 {
-		readTimeout := time.Duration(self.user.timeout) * time.Second
+	if self.father.father.timeout != 0 {
+		readTimeout := time.Duration(self.father.father.timeout) * time.Second
 		err = self.SetReadDeadline(time.Now().Add(readTimeout))
 		err = newError(self.father.format, "client set timeout error:", err)
 	}
 	return
 }
+
 func (self *remote) setTimeOut() (err error) {
 	return
 }
@@ -127,6 +126,7 @@ func (self *client) getRemote() (rt *remote, err error) {
 	// read till we get possible domain length field
 	self.setTimeOut()
 	n, err := io.ReadAtLeast(self, buf, idDmLen+1)
+
 	if err != nil {
 		err = newError(self.father.format, "read domain form client error:", err)
 		return
@@ -141,7 +141,7 @@ func (self *client) getRemote() (rt *remote, err error) {
 	case typeDm:
 		reqLen = int(buf[idDmLen]) + lenDmBase
 	default:
-		err = newError(self.father.format, "addr type not supported", string(buf[idType]))
+		err = newError(self.father.format, "type of request address is not supported", string(buf[idType]))
 		return
 	}
 	if n < reqLen { // rare case
@@ -154,7 +154,6 @@ func (self *client) getRemote() (rt *remote, err error) {
 		// it's possible to read more than just the request head
 		extra = buf[reqLen:n]
 	}
-
 	// Return string for typeIP is not most efficient, but browsers (Chrome,
 	// Safari, Firefox) all seems using typeDm exclusively. So this is not a
 	// big problem.
@@ -170,9 +169,8 @@ func (self *client) getRemote() (rt *remote, err error) {
 	port = int(binary.BigEndian.Uint16(buf[reqLen-2 : reqLen]))
 	host = net.JoinHostPort(ip, strconv.Itoa(port))
 	// tcp to remote
-
-
 	conn, err := net.Dial("tcp", host)
+
 	if err != nil {
 		if ne, ok := err.(*net.OpError); ok && (ne.Err == syscall.EMFILE || ne.Err == syscall.ENFILE) {
 			// log too many open file error
@@ -185,6 +183,8 @@ func (self *client) getRemote() (rt *remote, err error) {
 	}
 
 	rt = &remote{conn, host, ip, port, extra, false, self.father}
+	fmt.Println(string(extra))
+	err = rt.checkMethod()
 	return
 }
 
@@ -221,7 +221,7 @@ func (self *local) run() (err error) {
 */
 func (self *local) remoteToClient() (total int, raw_header []byte) {
 	total, raw_header =  pipeThenClose(self.remote, self.client)
-	self.client.user.addFlow(total)
+//	self.client.user.addFlow(total)
 	return
 }
 

@@ -1,4 +1,3 @@
-
 /*
 *accept all of message eg. error, feedback from gorountine
 *
@@ -26,13 +25,13 @@ func NewBroadcast() (bd *Broadcast) {
 func (self *Broadcast) addError(err error) {
 	select {
 	case self.errChan <- err:
-	default://avoid bloc with default
+	default://avoid block with default
 	}
 }
 
 func (self *Broadcast) addMsg(msg message) {
 	select {
 	case self.msgChan <- msg:
-	default://avoid bloc with default
+	default://avoid block with default
 	}
 }

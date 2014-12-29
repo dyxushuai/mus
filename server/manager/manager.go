@@ -99,7 +99,7 @@ func (self *Manager) AddServer(port string) (err error) {
 		bd.addError(err)
 		return
 	}
-	ss, er := newServer(port)
+	ss, er := newServer(port, "rc4", "123456", 60000)
 
 	if er != nil {
 		err = er
