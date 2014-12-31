@@ -2,11 +2,13 @@
 package manager
 
 import (
+	"time"
 	"net"
 	"sync"
 	"fmt"
 	"strings"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
+	"github.com/JohnSmithX/mus/config"
 )
 
 
@@ -19,22 +21,37 @@ const (
 	STOP
 )
 
+const (
+	PREFIX = "mus:"
+	Hour = iota
+	Day
+	Month
+	Year
+)
+
+
 type server struct {
 	sync.Mutex
-	net.Listener
-	port string //be used as id
-	comChan ComChan //command channel
-	local map[string]*local //1 to 1 : remote addr -> local
-	format string
-	started bool
-	method string //encrypt method
-	password string //secret key
-	cipher *ss.Cipher
-	timeout int64
+
+	Port          string        `json:"port"`
+	Method        string        `json:"method"`
+	Password      string        `json:"password"`
+	Current       int64        `json:"current"`
+	Limit         int64        `json:"limit"`
+	Timeout       int64        `json:"timeout"`
+
+	listener      net.Listener
+	comChan       ComChan          //command channel
+	local        map[string]*local //1 to 1 : remote addr -> local
+	format        string
+	started       bool
+	cipher        *ss.Cipher
+	store        *config.Storage
 }
 
-
-
+func getServer() {
+	redis.GetBy()
+}
 
 func newServer(port, method, password string, timeout int64) (sserver *server,err error) {
 
@@ -106,12 +123,9 @@ func (self *server) stop() {
 	}
 }
 
-
 func (self *server) isStarted() bool {
 	return self.started
 }
-
-
 
 func (self *server) start() (err error) {
 	if self.started {
@@ -125,7 +139,6 @@ func (self *server) start() (err error) {
 	}()
 	return
 }
-
 
 func (self *server) listen() (err error) {
 	self.started = true
@@ -148,13 +161,13 @@ loop:
 		default:
 		}
 
-		conn, err := self.Accept()
+		conn, err := self.listener.Accept()
 		if err != nil {
 			err = newError(self.format, "listener accpet error:", err)
 			continue
 		}
 		go func() {
-			err := self.handleConnect(conn)
+			flow, err := self.handleConnect(conn)
 			if err != nil {
 				bd.addError(err)
 			}
@@ -164,7 +177,7 @@ loop:
 	return
 }
 
-func(self *server) handleConnect(conn net.Conn) (err error) {
+func (self *server) handleConnect(conn net.Conn) (flow int, err error) {
 
 	defer func () {
 		conn.Close()
@@ -175,9 +188,86 @@ func(self *server) handleConnect(conn net.Conn) (err error) {
 	if err != nil {
 		return
 	}
-	err = local.run()
+	flow, err = local.run()
 	if err != nil {
 		return
 	}
+	return
+}
+
+func (self *server) OverFlow() bool {
+	return self.Current > self.Limit
+}
+
+func (self *server) increase(key string, incr int) (score int64, err error) {
+	score, err = self.store.IncrSize(key, incr)
+	return
+}
+
+func (self *server) getKeyBy(k int) (key string) {
+
+	var year, month, day, hour int
+	now := time.Now()
+	year = now.Year()
+	month = int(now.Month())
+	day = now.Day()
+	hour = now.Hour()
+
+	switch k {
+	case Hour:
+		key = fmt.Sprintf("%s:%d:%d:%d:%d", self.Port, year, month, day, hour)
+	case Day:
+		key = fmt.Sprintf("%s:%d:%d:%d", self.Port, year, month, day)
+	case Month:
+		key = fmt.Sprintf("%s:%d:%d", self.Port, year, month)
+	case Year:
+		key = fmt.Sprintf("%s:%d", self.Port, year)
+	default:
+
+	}
+	return
+}
+
+func (self *server) Config() (port, method, password string, timeout int64) {
+	port = self.Port
+	method = self.Method
+	password = self.Password
+	timeout = self.Timeout
+	return
+}
+
+func (self *server) IncreaseByHour(incr int) (score int64, err error) {
+	key := self.getKeyBy(Hour)
+	if key != "" {
+		return
+	}
+	score, err = self.increase(key, incr)
+	return
+}
+
+func (self *server) IncreaseByDay(incr int) (score int64, err error) {
+	key := self.getKeyBy(Day)
+	if key != "" {
+		return
+	}
+	score, err = self.increase(key, incr)
+	return
+}
+
+func (self *server) IncreaseByMonth(incr int) (score int64, err error) {
+	key := self.getKeyBy(Month)
+	if key != "" {
+		return
+	}
+	score, err = self.increase(key, incr)
+	return
+}
+
+func (self *server) IncreaseByYear(incr int) (score int64, err error) {
+	key := self.getKeyBy(Year)
+	if key != "" {
+		return
+	}
+	score, err = self.increase(key, incr)
 	return
 }

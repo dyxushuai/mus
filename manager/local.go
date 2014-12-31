@@ -192,7 +192,7 @@ func (self *client) getRemote() (rt *remote, err error) {
 
 
 //to and from neet two goroutine
-func (self *local) run() (err error) {
+func (self *local) run() (flow int, err error) {
 	closed := false
 
 	defer func() {
@@ -205,7 +205,7 @@ func (self *local) run() (err error) {
 		go func() {
 			self.clientToRemote()
 		}()
-		self.remoteToClient()
+		flow, _ = self.remoteToClient()
 		closed = true
 	} else {
 		err = newError(self.format, "request a non-http method", "")

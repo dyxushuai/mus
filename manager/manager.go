@@ -4,7 +4,7 @@ package manager
 
 import (
 	"sync"
-//	"fmt"
+	"github.com/JohnSmithX/mus/config"
 )
 
 type Manager struct {
@@ -19,12 +19,17 @@ type Config interface {
 //broadcast
 var bd = NewBroadcast()
 
+var redis *config.Storage
 
 
-func CreateManager() (manager *Manager) {
-	//default create a chan to receive error message
+func New() (manager *Manager) {
+
+	//create redis connect pool
+	redis = config.NewStorage()
+
 	manager = &Manager{}
 	manager.ssServers = make(map[string]*server)
+
 	return
 }
 

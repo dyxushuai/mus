@@ -2,18 +2,41 @@ package main
 
 import (
 	"fmt"
+	"encoding/json"
 )
 
 type A struct {
-	name string
+
+}
+
+type B struct {
+
 }
 
 
+type serverOptions struct {
+	A
+	B
+	Port     string `json:"port"`
+	Password string `json:"password"`
+	Method   string `json:"method"`
+	current  int64	`json:"current"`
+	Limit    int64  `json:"limit"`
+	Timeout  int64  `json:"timeout"`
+}
 
-type B A
 
 func main() {
-	var a = A{name: "xus"}
-	var b B = a
-	fmt.Println(b)
+	var aa = A{}
+	var bb = B{}
+	a := &serverOptions{
+		aa,
+		bb,
+		Port: "9090",
+		Password: "123456",
+		Method:   "rc4",
+	}
+
+	b, _ := json.Marshal(a)
+	fmt.Println(string(b))
 }
