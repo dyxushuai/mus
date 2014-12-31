@@ -12,7 +12,9 @@ type Manager struct {
 	ssServers map[string]*server //port -> ss server
 }
 
-
+type Config interface {
+	Config() (string, string, string, int64)
+}
 
 //broadcast
 var bd = NewBroadcast()
@@ -43,7 +45,6 @@ func (self *Manager) getServer(port string) (ss *server, err error) {
 	ss = self.ssServers[port]
 	return
 }
-
 
 
 func (self *Manager) StartServer(port string) (err error) {
@@ -80,31 +81,35 @@ func (self *Manager) ServerList() []string {
 //	return
 //}
 
-func (self *Manager) AddServerAndRun(port string) (err error) {
-	err = self.AddServer(port)
+func (self *Manager) AddServerAndRun(config Config) (err error) {
+
+	id, err := self.AddServer(config)
 	if err != nil {
 		return
 	}
-	err = self.StartServer(port)
+	err = self.StartServer(id)
 	return
 }
 
 
 //create a new listener with a given port
 //each listener with a new goroutine
-func (self *Manager) AddServer(port string) (err error) {
+func (self *Manager) AddServer(config Config) (id string, err error) {
+	port, method, password, timeout := config.Config()
+
 
 	if self.hasServer(port) {
 		err = newError("Add proxy server failed: proxy server has listened on port %s", port)
 		bd.addError(err)
 		return
 	}
-	ss, er := newServer(port, "rc4", "123456", 60000)
+	ss, er := newServer(port, method, password, timeout)
 
 	if er != nil {
 		err = er
 		return
 	}
+	id = port
 	self.Lock()
 	self.ssServers[port] = ss
 	self.Unlock()

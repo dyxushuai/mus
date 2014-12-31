@@ -37,7 +37,7 @@ type remote struct {
 	net.Conn
 	host string
 	ip string
-	port int
+	port string
 	extra []byte //client request content
 	isHttp bool
 	father *local
@@ -115,7 +115,7 @@ func (self *client) getRemote() (rt *remote, err error) {
 	var (
 		extra []byte
 		ip string
-		port int
+		port string
 		host string
 	)
 	// buf size should at least have the same size with the largest possible
@@ -166,8 +166,8 @@ func (self *client) getRemote() (rt *remote, err error) {
 		ip = string(buf[idDm0 : idDm0+buf[idDmLen]])
 	}
 	// parse port
-	port = int(binary.BigEndian.Uint16(buf[reqLen-2 : reqLen]))
-	host = net.JoinHostPort(ip, strconv.Itoa(port))
+	port = strconv.Itoa(int(binary.BigEndian.Uint16(buf[reqLen-2 : reqLen])))
+	host = net.JoinHostPort(ip, port)
 	// tcp to remote
 	conn, err := net.Dial("tcp", host)
 
