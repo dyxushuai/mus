@@ -8,18 +8,20 @@ import (
 )
 
 type Manager struct {
-	sync.Mutex
+	mu sync.Mutex
 	ssServers map[string]*server //port -> ss server
 }
 
-type Config interface {
+type config interface {
 	Config() (string, string, string, int64)
 }
+
+type servers []server
 
 //broadcast
 var bd = NewBroadcast()
 
-var redis *config.Storage
+var redis *Storage
 
 
 func New() (manager *Manager) {
@@ -33,7 +35,10 @@ func New() (manager *Manager) {
 	return
 }
 
-
+//wrap lock method
+func (self *Manager)withLockDo(fn interface {}) {
+	
+}
 
 //private method for Manager instance
 func (self *Manager) hasServer(port string) bool {
@@ -67,10 +72,10 @@ func (self *Manager) StartServer(port string) (err error) {
 }
 
 //current proxy server list
-func (self *Manager) ServerList() []string {
-	var list []string
-	for k, _ := range self.ssServers {
-		list = append(list, k)
+func (self *Manager) ServerList() servers {
+	var list servers
+	for _, v := range self.ssServers {
+		list = append(list, v)
 	}
 	return list
 }
@@ -86,9 +91,9 @@ func (self *Manager) ServerList() []string {
 //	return
 //}
 
-func (self *Manager) AddServerAndRun(config Config) (err error) {
+func (self *Manager) AddServerAndRun(conf config) (err error) {
 
-	id, err := self.AddServer(config)
+	id, err := self.AddServer(conf)
 	if err != nil {
 		return
 	}
@@ -99,8 +104,8 @@ func (self *Manager) AddServerAndRun(config Config) (err error) {
 
 //create a new listener with a given port
 //each listener with a new goroutine
-func (self *Manager) AddServer(config Config) (id string, err error) {
-	port, method, password, timeout := config.Config()
+func (self *Manager) AddServer(conf config) (id string, err error) {
+	port, method, password, timeout := conf.Config()
 
 
 	if self.hasServer(port) {

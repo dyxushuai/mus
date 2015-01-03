@@ -1,20 +1,17 @@
-package config
+package manager
 
 import (
 	"github.com/garyburd/redigo/redis"
 	"time"
 )
 
-
-
 type Storage struct {
-	*redis.Pool
+	pool *redis.Pool
 }
 
 
 
-func NewStorage() (s *Storage) {
-	server, password := REDIS_SERVER, REDIS_PASSWORD
+func NewStorage(server, password string) (s *Storage) {
 	pool := &redis.Pool{
 		MaxIdle: 3,
 		IdleTimeout: 240 * time.Second,
@@ -35,49 +32,41 @@ func NewStorage() (s *Storage) {
 		},
 	}
 
-	s = &Storage{pool}
+	s = &Storage{pool: pool}
+	return
+}
+
+func (self * Storage) withConnDo(arg... interface {}) (reply interface{}, err error) {
+	conn := self.pool.Get()
+	defer conn.Close()
+	reply, err = conn.DO(arg)
 	return
 }
 
 func (self *Storage) Keys(pat string) (data []byte, err error) {
 	var data []byte
-	var conn = self.Get()
-	defer conn.Close()
-	data, err = redis.Bytes(conn.Do("KEYS", PREFIX + "*"))
+	data, err = redis.Bytes(self.withConnDo("KEYS", PREFIX + pat))
 	return
 }
 
 func (self *Storage) GetBy(key string) (data []byte, err error) {
 	var data []byte
-
-	var conn = self.Get()
-	defer conn.Close()
-
-	data, err = redis.Bytes(conn.Do("GET", PREFIX + key))
+	data, err = redis.Bytes(self.withConnDo("GET", PREFIX + key))
 	return
 }
 
 func (self *Storage) SetBy(key string, data []byte) (err error) {
-	conn := self.Get()
-	defer conn.Close()
-
-	_, err = conn.Do("SET", PREFIX + key, data)
+	_, err = self.withConnDo("SET", key, data)
 	return
 }
 
 func (self *Storage) IncrSize(key string, incr int) (score int64, err error) {
-	var conn = self.Get()
-	defer conn.Close()
-
-	score, err = redis.Int64(conn.Do("INCRBY", PREFIX + key, incr))
+	score, err = redis.Bytes(self.withConnDo("INCRBY", PREFIX + key, incr))
 	return
 }
 
 func (self *Storage) GetSize(key string) (score int64, err error) {
-	var conn = self.Get()
-	defer conn.Close()
-
-	score, err = redis.Int64(conn.Do("GET", PREFIX + key))
+	score, err = redis.Bytes(self.withConnDo("GET", PREFIX + key))
 	return
 }
 

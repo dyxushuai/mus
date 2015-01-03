@@ -31,7 +31,7 @@ const (
 
 
 type server struct {
-	sync.Mutex
+	mu sync.Mutex
 
 	Port          string        `json:"port"`
 	Method        string        `json:"method"`
@@ -42,16 +42,14 @@ type server struct {
 
 	listener      net.Listener
 	comChan       ComChan          //command channel
-	local        map[string]*local //1 to 1 : remote addr -> local
+	local		  map[string]*local //1 to 1 : remote addr -> local
 	format        string
 	started       bool
 	cipher        *ss.Cipher
-	store        *config.Storage
+	store         *config.Storage
 }
 
-func getServer() {
-	redis.GetBy()
-}
+
 
 func newServer(port, method, password string, timeout int64) (sserver *server,err error) {
 

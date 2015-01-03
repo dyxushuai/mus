@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"encoding/json"
+	"net"
 )
 
 type A struct {
@@ -36,7 +37,7 @@ func main() {
 		Password: "123456",
 		Method:   "rc4",
 	}
-
+	net.ListenTCP()
 	b, _ := json.Marshal(a)
 	fmt.Println(string(b))
 }
