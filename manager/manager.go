@@ -12,22 +12,24 @@ type Manager struct {
 	store *Storage
 }
 
-type servers []Server
 
 var log Verbose
 
 
 func New(verbose bool) (manager *Manager) {
 	//create redis connect pool
-	log = verbose
+	log = Verbose(verbose)
 	manager = &Manager{}
 	manager.ssServers = make(map[string]*Server)
 	return
 }
 
+
+
 func (self *Manager) InitRedis(host, password string) {
 	self.store = NewStorage(host, password)
 }
+
 
 //wrap lock method
 func (self *Manager) withLockDo(fn func()) {
@@ -45,23 +47,20 @@ func (self *Manager) hasServer(port string) bool {
 func (self *Manager) getServer(port string) (ss *Server, err error) {
 	if !self.hasServer(port) {
 		err = newError("Thers is no proxy server listened on the port: %s", port)
-		bd.addError(err)
 		return
 	}
 	ss = self.ssServers[port]
 	return
 }
 
-//current proxy server list
-func (self *Manager) ServerList() servers {
-	var list servers
-	for _, v := range self.ssServers {
-		list = append(list, v)
-	}
-	return list
-}
+
 
 func (self *Manager) AddServerAndRun(port, method, password string, limit, timeout int64) (err error) {
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
 
 	id, err := self.AddServer(port, method, password, limit, timeout)
 	if err != nil {
@@ -73,6 +72,11 @@ func (self *Manager) AddServerAndRun(port, method, password string, limit, timeo
 
 //create a new listener with a given args
 func (self *Manager) AddServer(port, method, password string, limit, timeout int64) (id string, err error) {
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
 
 	if self.hasServer(port) {
 		err = newError("Add proxy server failed: proxy server has listened on port %s", port)
@@ -93,6 +97,11 @@ func (self *Manager) AddServer(port, method, password string, limit, timeout int
 }
 
 func (self *Manager) StartServer(port string) (err error) {
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
 
 	if !self.hasServer(port) {
 		err = newError("Start proxy server failed: no server listen on port %s", port)
@@ -103,8 +112,13 @@ func (self *Manager) StartServer(port string) (err error) {
 }
 //stop a started server
 func (self *Manager) StopServer(port string) (err error) {
-	var ss *Server
-	ss, err = self.getServer(port)
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
+
+	ss, err := self.getServer(port)
 	if err != nil {
 		return
 	}
@@ -114,8 +128,14 @@ func (self *Manager) StopServer(port string) (err error) {
 
 //drop a existed listener
 func (self *Manager) DropServer(port string) (err error) {
-	var ss *Server
-	ss, err = self.getServer(port)
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
+
+
+	ss, err := self.getServer(port)
 	if err != nil {
 		return
 	}

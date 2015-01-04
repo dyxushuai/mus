@@ -2,24 +2,18 @@ package main
 
 import (
 	"github.com/JohnSmithX/mus/manager"
-	"github.com/JohnSmithX/mus/models"
+	"net/http"
+//	"github.com/JohnSmithX/mus/models"
 //	"github.com/gohttp/app"
 //	"github.com/gohttp/logger"
 //	"github.com/goocean/methodoverride"
 )
 
 func main() {
-	m := manager.New()
+	m := manager.New(true)
 
-	models.NewStorage("")
-	s := models.Server{
-		Port: "9090",
-		Password: "123456",
-		Method:   "rc4",
-	}
-	m.AddServerAndRun(&s)
-	go m.LOG()
-	m.DEBUG()
+	m.AddServerAndRun("9090", "rc4", "123456", 1111111, 10)
+	http.ListenAndServe(":1234", nil)
 //	server := app.New()
 //	server.Use(logger.New())
 //	server.Use(methodoverride.New())

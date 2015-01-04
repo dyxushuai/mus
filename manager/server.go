@@ -67,7 +67,7 @@ func newServer(port, method, password string, limit, timeout int64, redis *Stora
 		Current: 0,
 		Limit: limit,
 		listener: ln,
-		comChan: make(chan ComChan),
+		comChan: make(ComChan),
 		local: make(map[string]*local),
 		format: errFormat,
 		started: false,
@@ -76,6 +76,12 @@ func newServer(port, method, password string, limit, timeout int64, redis *Stora
 	}
 
 	return
+}
+
+func (self *Server) withLockDo(fn func()) {
+	self.mu.Lock()
+	defer self.mu.Unlock()
+	fn()
 }
 
 func (self *Server) addLocal(conn net.Conn) (local *local, err error) {
@@ -89,12 +95,10 @@ func (self *Server) addLocal(conn net.Conn) (local *local, err error) {
 		return
 	}
 
-	self.Lock()
-	defer func () {
-		self.Unlock()
-	}()
 	ip := strings.Split(conn.RemoteAddr().String(), ":")[0]
-	self.local[ip] = local
+	self.withLockDo(func() {
+		self.local[ip] = local
+	})
 
 	return
 }
@@ -110,7 +114,7 @@ func (self *Server) Close() (err error) {
 	//second close the chan
 	//third close the listener
 
-	self.stop()
+	self.Stop()
 	close(self.comChan)
 	if err := self.listener.Close(); err != nil {
 		err = newError(self.format, "close with error:", err)
@@ -163,7 +167,7 @@ loop:
 		conn, err := self.listener.Accept()
 		if err != nil {
 			err = newError(self.format, "listener accpet error:", err)
-			log.Debug(err)
+			log.Debug(err.Error())
 			continue
 		}
 		go func() {
@@ -171,7 +175,7 @@ loop:
 			//TODO: use `flow`
 			_ = flow
 			if err != nil {
-				log.Debug(err)
+				log.Debug(err.Error())
 			}
 		}()
 

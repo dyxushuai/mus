@@ -9,8 +9,8 @@ import (
 
 type Verbose bool
 
-func (self *Verbose) withVerboseDo(fn func()) {
-	if self {
+func (self Verbose) withVerboseDo(fn func()) {
+	if self == true {
 		fn()
 	}
 }
