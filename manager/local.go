@@ -3,7 +3,6 @@ package manager
 
 import (
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
-	"github.com/cyfdecyf/leakybuf"
 	"net"
 	"io"
 	"encoding/binary"
@@ -238,7 +237,7 @@ const (
 	nBuf = 2048
 )
 
-var pipeBuf = leakybuf.NewLeakyBuf(nBuf, bufSize)
+var pipeBuf = ss.NewLeakyBuf(nBuf, bufSize)
 
 //from source to  destination ->
 func pipeThenClose(src, dst conn) (total int, raw_header []byte) {
