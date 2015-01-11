@@ -4,6 +4,7 @@ package manager
 
 import (
 	"sync"
+	"github.com/JohnSmithX/mus/models"
 )
 
 type Manager struct {
@@ -16,19 +17,17 @@ type Manager struct {
 var log Verbose
 
 
-func New(verbose bool) (manager *Manager) {
+func New(store models.Storage, verbose bool) (manager *Manager) {
 	//create redis connect pool
 	log = Verbose(verbose)
 	manager = &Manager{}
 	manager.ssServers = make(map[string]*Server)
+	manager.store = store
 	return
 }
 
 
 
-func (self *Manager) InitRedis(host, password string) {
-	self.store = NewStorage(host, password)
-}
 
 
 //wrap lock method

@@ -1,9 +1,11 @@
-package manager
+package models
 
 import (
 	"github.com/garyburd/redigo/redis"
 	"time"
 	"fmt"
+	"encoding/json"
+	"strings"
 )
 
 const (
@@ -14,6 +16,14 @@ const (
 	Year
 )
 
+type Server struct {
+	Port          string       `json:"port"`
+	Method        string       `json:"method"`
+	Password      string       `json:"password"`
+	Current       int64        `json:"current"`
+	Limit         int64        `json:"limit"`
+	Timeout       int64        `json:"timeout"`
+}
 
 type Storage struct {
 	pool *redis.Pool
@@ -31,6 +41,7 @@ func NewStorage(server, password string) (s *Storage) {
 			}
 			if _, err := c.Do("AUTH", password); err != nil {
 				c.Close()
+				fmt.Println(err)
 				return nil, err
 			}
 			return c, err
@@ -43,6 +54,14 @@ func NewStorage(server, password string) (s *Storage) {
 
 	s = &Storage{pool: pool}
 	return
+}
+
+//remove PREFIX form key if it has
+func removePrefix(key string) string {
+	if strings.HasPrefix(key, PREFIX) {
+		return strings.Replace(key, PREFIX, "", 1)
+	}
+	return key
 }
 
 func (self * Storage) withConnDo(keyName string, arg... interface {}) (reply interface{}, err error) {
@@ -76,13 +95,30 @@ func (self *Storage) getKeyBy(k int, id string) (key string) {
 	return
 }
 
-func (self *Storage) Keys(pat string) (data []byte, err error) {
-	data, err = redis.Bytes(self.withConnDo("KEYS", PREFIX + pat))
+func (self *Storage) Keys(pat string) (keys []string, err error) {
+	keys, err = redis.Strings(self.withConnDo("KEYS", PREFIX + pat))
 	return
 }
 
-func (self *Storage) GetServer(key string) (data []byte, err error) {
-	data, err = redis.Bytes(self.withConnDo("GET", PREFIX + key))
+func (self *Storage) GetServer(key string) (server *Server, err error) {
+	data, err := redis.Bytes(self.withConnDo("GET", PREFIX + key))
+
+	err = json.Unmarshal(data, &server)
+	return
+}
+
+//pat -> "server:**" will get all exsited servers
+func (self *Storage) GetServers(pat string) (servers []*Server, err error) {
+	keys, err := self.Keys(pat)
+	if err != nil {
+		return
+	}
+	for _, key := range keys {
+		key = removePrefix(key)
+		if server, err := self.GetServer(key); err == nil {
+			servers = append(servers, server)
+		}
+	}
 	return
 }
 
