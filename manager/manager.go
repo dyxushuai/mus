@@ -4,40 +4,38 @@ package manager
 
 import (
 	"sync"
-	"github.com/JohnSmithX/mus/config"
 )
 
 type Manager struct {
 	mu sync.Mutex
-	ssServers map[string]*server //port -> ss server
+	ssServers map[string]*Server //port -> ss server
+	store *Storage
 }
 
-type config interface {
-	Config() (string, string, string, int64)
-}
 
-type servers []server
-
-//broadcast
-var bd = NewBroadcast()
-
-var redis *Storage
+var log Verbose
 
 
-func New() (manager *Manager) {
-
+func New(verbose bool) (manager *Manager) {
 	//create redis connect pool
-	redis = config.NewStorage()
-
+	log = Verbose(verbose)
 	manager = &Manager{}
-	manager.ssServers = make(map[string]*server)
-
+	manager.ssServers = make(map[string]*Server)
 	return
 }
 
+
+
+func (self *Manager) InitRedis(host, password string) {
+	self.store = NewStorage(host, password)
+}
+
+
 //wrap lock method
-func (self *Manager)withLockDo(fn interface {}) {
-	
+func (self *Manager) withLockDo(fn func()) {
+	self.mu.Lock()
+	defer self.mu.Unlock()
+	fn()
 }
 
 //private method for Manager instance
@@ -46,10 +44,9 @@ func (self *Manager) hasServer(port string) bool {
 	return ok
 }
 
-func (self *Manager) getServer(port string) (ss *server, err error) {
+func (self *Manager) getServer(port string) (ss *Server, err error) {
 	if !self.hasServer(port) {
 		err = newError("Thers is no proxy server listened on the port: %s", port)
-		bd.addError(err)
 		return
 	}
 	ss = self.ssServers[port]
@@ -57,43 +54,15 @@ func (self *Manager) getServer(port string) (ss *server, err error) {
 }
 
 
-func (self *Manager) StartServer(port string) (err error) {
 
-	if !self.hasServer(port) {
-		err = newError("Start proxy server failed: no server listen on port %s", port)
-		bd.addError(err)
-		return
-	}
-	err = self.ssServers[port].start()
-	if err != nil {
-		bd.addError(err)
-	}
-	return
-}
+func (self *Manager) AddServerAndRun(port, method, password string, limit, timeout int64) (err error) {
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
 
-//current proxy server list
-func (self *Manager) ServerList() servers {
-	var list servers
-	for _, v := range self.ssServers {
-		list = append(list, v)
-	}
-	return list
-}
-
-////run all of proxy which hasn't started
-//func (self *Manager) RunAllOfServer() (err []error) {
-//	for port, _ := range self.ssServers {
-//		er := self.startServer(port)
-//		if er != nil {
-//			err = append(err, er)
-//		}
-//	}
-//	return
-//}
-
-func (self *Manager) AddServerAndRun(conf config) (err error) {
-
-	id, err := self.AddServer(conf)
+	id, err := self.AddServer(port, method, password, limit, timeout)
 	if err != nil {
 		return
 	}
@@ -101,85 +70,87 @@ func (self *Manager) AddServerAndRun(conf config) (err error) {
 	return
 }
 
-
-//create a new listener with a given port
-//each listener with a new goroutine
-func (self *Manager) AddServer(conf config) (id string, err error) {
-	port, method, password, timeout := conf.Config()
-
+//create a new listener with a given args
+func (self *Manager) AddServer(port, method, password string, limit, timeout int64) (id string, err error) {
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
 
 	if self.hasServer(port) {
 		err = newError("Add proxy server failed: proxy server has listened on port %s", port)
-		bd.addError(err)
 		return
 	}
-	ss, er := newServer(port, method, password, timeout)
+	ss, er := newServer(port, method, password, limit, timeout, self.store)
 
 	if er != nil {
 		err = er
 		return
 	}
 	id = port
-	self.Lock()
-	self.ssServers[port] = ss
-	self.Unlock()
+
+	self.withLockDo(func() {
+		self.ssServers[port] = ss
+	})
 	return
 }
 
+func (self *Manager) StartServer(port string) (err error) {
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
 
-
+	if !self.hasServer(port) {
+		err = newError("Start proxy server failed: no server listen on port %s", port)
+		return
+	}
+	err = self.ssServers[port].Start()
+	return
+}
 //stop a started server
 func (self *Manager) StopServer(port string) (err error) {
-	var ss *server
-	ss, err = self.getServer(port)
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
+
+	ss, err := self.getServer(port)
 	if err != nil {
 		return
 	}
-	ss.stop()
+	ss.Stop()
 	return
 }
 
 //drop a existed listener
 func (self *Manager) DropServer(port string) (err error) {
-	var ss *server
-	ss, err = self.getServer(port)
+	defer func() {
+		if err != nil {
+			log.Debug(err.Error())
+		}
+	}()
+
+
+	ss, err := self.getServer(port)
 	if err != nil {
 		return
 	}
+
+	err = ss.Close()
 	//cannot delete the server which close failed
-	err = ss.close()
 	if err != nil {
 		return
 	}
-	self.Lock()
-	delete(self.ssServers, port)
-	self.Unlock()
+
+	self.withLockDo(func() {
+		delete(self.ssServers, port)
+	})
 	return
 }
 
-
-func (self *Manager) DEBUG() {
-	for {
-		select {
-		case err := <- bd.errChan:
-			if v, ok := err.(*errorType); ok {
-				v.print()
-			}
-		}
-	}
-}
-
-
-
-func (self *Manager) LOG() {
-	for {
-		select {
-		case msg := <- bd.msgChan:
-			if v, ok := msg.(log); ok {
-				v.print()
-			}
-		}
-	}
-}
 
 

@@ -3,34 +3,79 @@
 package manager
 
 import (
-	"time"
-	"fmt"
+	goLog "github.com/segmentio/go-log"
 )
 
-type log interface {
-	log() string
-	print()
-}
 
-type logType struct {
-	etime time.Time //error timestamp
-	s string //error content
-}
+type Verbose bool
 
-func (self *logType) log() string {
-	return self.s
-}
-
-func (self *logType) print() {
-	fmt.Println(fmt.Sprintf("[log] %s: %s", self.etime.Format("2006-01-02 15:04:05.999999999"), self.s))
-}
-
-func newLog(format string, a ...interface{}) log {
-	var logStr string
-	logStr = fmt.Sprintf(format, a...)
-	return &logType{
-		etime: time.Now(),
-		s: logStr,
+func (self Verbose) withVerboseDo(fn func()) {
+	if self == true {
+		fn()
 	}
 }
+
+func (self *Verbose) Debug(msg string, args ...interface{}) (err error) {
+	self.withVerboseDo(func() {
+		err = goLog.Debug(msg, args...)
+	})
+	return
+}
+
+// Info log.
+func (self *Verbose) Info(msg string, args ...interface{}) (err error) {
+	self.withVerboseDo(func() {
+		err = goLog.Info(msg, args...)
+	})
+	return
+}
+
+// Notice log.
+func (self *Verbose) Notice(msg string, args ...interface{}) (err error) {
+	self.withVerboseDo(func() {
+		err = goLog.Notice(msg, args...)
+	})
+	return
+}
+
+// Warning log.
+func (self *Verbose) Warning(msg string, args ...interface{}) (err error) {
+	self.withVerboseDo(func() {
+		err = goLog.Warning(msg, args...)
+	})
+	return
+}
+
+// Error log.
+func (self *Verbose) Error(msg string, args ...interface{}) (err error) {
+	self.withVerboseDo(func() {
+		err = goLog.Error(msg, args...)
+	})
+	return
+}
+
+// Critical log.
+func (self *Verbose) Critical(msg string, args ...interface{}) (err error) {
+	self.withVerboseDo(func() {
+		err = goLog.Critical(msg, args...)
+	})
+	return
+}
+
+// Alert log.
+func (self *Verbose) Alert(msg string, args ...interface{}) (err error) {
+	self.withVerboseDo(func() {
+		err = goLog.Alert(msg, args...)
+	})
+	return
+}
+
+// Emergency log.
+func (self *Verbose) Emergency(msg string, args ...interface{}) (err error) {
+	self.withVerboseDo(func() {
+		err = goLog.Emergency(msg, args...)
+	})
+	return
+}
+
 

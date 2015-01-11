@@ -16,11 +16,10 @@ const (
 const (
 	//format output
 	serverFormat string = "proxy server at port %s : %%s %%v"
-	//server command channel size
-	serverCommand int = 10
-
 )
 
+
+//
 const (
 	localFormat string = "client: %s : %%s %%v"
 )

@@ -23,7 +23,7 @@ type local struct {
 	client *client
 	remote *remote
 	format string
-	father *server
+	father *Server
 }
 
 type client struct {
@@ -44,7 +44,7 @@ type remote struct {
 }
 
 //create a client and get remote
-func newLocal(sserver *server,conn *ss.Conn) (l *local, err error) {
+func newLocal(sserver *Server,conn *ss.Conn) (l *local, err error) {
 
 	format := fmt.Sprintf(localFormat, conn.RemoteAddr())
 
@@ -60,8 +60,8 @@ func newLocal(sserver *server,conn *ss.Conn) (l *local, err error) {
 }
 
 func (self *client) setTimeOut() (err error) {
-	if self.father.father.timeout != 0 {
-		readTimeout := time.Duration(self.father.father.timeout) * time.Second
+	if self.father.father.Timeout != 0 {
+		readTimeout := time.Duration(self.father.father.Timeout) * time.Second
 		err = self.SetReadDeadline(time.Now().Add(readTimeout))
 		err = newError(self.father.format, "client set timeout error:", err)
 	}
@@ -182,7 +182,6 @@ func (self *client) getRemote() (rt *remote, err error) {
 	}
 
 	rt = &remote{conn, host, ip, port, extra, false, self.father}
-	fmt.Println(string(extra))
 	err = rt.checkMethod()
 	return
 }
@@ -200,15 +199,21 @@ func (self *local) run() (flow int, err error) {
 		}
 	}()
 
-	if self.remote.isHttp {
-		go func() {
-			self.clientToRemote()
-		}()
-		flow, _ = self.remoteToClient()
-		closed = true
-	} else {
-		err = newError(self.format, "request a non-http method", "")
-	}
+
+	go func() {
+		self.clientToRemote()
+	}()
+	flow, _ = self.remoteToClient()
+	closed = true
+//	if self.remote.isHttp {
+//		go func() {
+//			self.clientToRemote()
+//		}()
+//		flow, _ = self.remoteToClient()
+//		closed = true
+//	} else {
+//		err = newError(self.format, "request a non-http method", "")
+//	}
 	return
 }
 
@@ -252,6 +257,7 @@ func pipeThenClose(src, dst conn) (total int, raw_header []byte) {
 	for {
 		src.setTimeOut()
 		n, err := src.Read(buf)
+		log.Info(string(buf))
 		// read may return EOF with n > 0
 		// should always process n > 0 bytes before handling error
 		if n > 0 {

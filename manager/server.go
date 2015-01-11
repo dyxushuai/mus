@@ -2,40 +2,30 @@
 package manager
 
 import (
-	"time"
 	"net"
 	"sync"
 	"fmt"
 	"strings"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
-	"github.com/JohnSmithX/mus/config"
 )
 
 
-
-
 type ComChan chan int
+
 //command for loop
 const (
 	NULL int = iota
 	STOP
 )
 
-const (
-	PREFIX = "mus:"
-	Hour = iota
-	Day
-	Month
-	Year
-)
 
 
-type server struct {
+type Server struct {
 	mu sync.Mutex
 
-	Port          string        `json:"port"`
-	Method        string        `json:"method"`
-	Password      string        `json:"password"`
+	Port          string       `json:"port"`
+	Method        string       `json:"method"`
+	Password      string       `json:"password"`
 	Current       int64        `json:"current"`
 	Limit         int64        `json:"limit"`
 	Timeout       int64        `json:"timeout"`
@@ -46,12 +36,10 @@ type server struct {
 	format        string
 	started       bool
 	cipher        *ss.Cipher
-	store         *config.Storage
+	store         *Storage
 }
 
-
-
-func newServer(port, method, password string, timeout int64) (sserver *server,err error) {
+func newServer(port, method, password string, limit, timeout int64, redis *Storage) (server *Server,err error) {
 
 	if port == "" {
 		err = newError("Cannot create a server without port")
@@ -71,12 +59,32 @@ func newServer(port, method, password string, timeout int64) (sserver *server,er
 		return
 	}
 
-	sserver = &server{sync.Mutex{}, ln, port, make(ComChan, serverCommand), make(map[string]*local), errFormat, false, method, password, cipher, timeout}
+	server = &Server{
+		Port: port,
+		Method: method,
+		Password: password,
+		Timeout: timeout,
+		Current: 0,
+		Limit: limit,
+		listener: ln,
+		comChan: make(ComChan),
+		local: make(map[string]*local),
+		format: errFormat,
+		started: false,
+		cipher: cipher,
+		store: redis,
+	}
+
 	return
 }
 
+func (self *Server) withLockDo(fn func()) {
+	self.mu.Lock()
+	defer self.mu.Unlock()
+	fn()
+}
 
-func (self *server) addLocal(conn net.Conn) (local *local, err error) {
+func (self *Server) addLocal(conn net.Conn) (local *local, err error) {
 
 	cipher := self.cipher.Copy()
 	ssconn := ss.NewConn(conn, cipher)
@@ -87,31 +95,48 @@ func (self *server) addLocal(conn net.Conn) (local *local, err error) {
 		return
 	}
 
-	self.Lock()
-	defer func () {
-		self.Unlock()
-	}()
 	ip := strings.Split(conn.RemoteAddr().String(), ":")[0]
-	self.local[ip] = local
+	self.withLockDo(func() {
+		self.local[ip] = local
+	})
 
 	return
 }
+func (self *Server) isStarted() bool {
+	return self.started
+}
+func (self *Server) isOverFlow() bool {
+	return self.Current > self.Limit
+}
 
-func (self *server) close() (err error) {
+func (self *Server) Close() (err error) {
 	//first stop the loop
 	//second close the chan
 	//third close the listener
 
-	self.stop()
+	self.Stop()
 	close(self.comChan)
-	if err := self.Close(); err != nil {
+	if err := self.listener.Close(); err != nil {
 		err = newError(self.format, "close with error:", err)
 	}
 	return
 }
 
+func (self *Server) Start() (err error) {
+	if self.started {
+		err = newError(self.format, "run server error:", "has started")
+	}
+	go func() {
+		err := self.listen()
+		if err != nil {
+			return
+		}
+	}()
+	return
+}
+
 //stop the loop
-func (self *server) stop() {
+func (self *Server) Stop() {
 	if !self.isStarted() {
 		go func() {
 			select {
@@ -121,35 +146,15 @@ func (self *server) stop() {
 	}
 }
 
-func (self *server) isStarted() bool {
-	return self.started
-}
-
-func (self *server) start() (err error) {
-	if self.started {
-		err = newError(self.format, "run server error:", "has started")
-	}
-	go func() {
-		err := self.listen()
-		if err != nil {
-			bd.addError(err)
-		}
-	}()
-	return
-}
-
-func (self *server) listen() (err error) {
+func (self *Server) listen() (err error) {
 	self.started = true
-	bd.addMsg(newLog(self.format, "start", ""))
+	log.Info("server at port: %s started", self.Port)
 	defer func() {
-		bd.addMsg(newLog(self.format, "stop", ""))
 		self.started = false
+		log.Info("server at port: %s stoped", self.Port)
 	}()
 loop:
 	for {
-		if err != nil {
-			bd.addError(err)
-		}
 
 		select{
 		case com := <- self.comChan:
@@ -162,12 +167,15 @@ loop:
 		conn, err := self.listener.Accept()
 		if err != nil {
 			err = newError(self.format, "listener accpet error:", err)
+			log.Debug(err.Error())
 			continue
 		}
 		go func() {
 			flow, err := self.handleConnect(conn)
+			//TODO: use `flow`
+			_ = flow
 			if err != nil {
-				bd.addError(err)
+				log.Debug(err.Error())
 			}
 		}()
 
@@ -175,7 +183,7 @@ loop:
 	return
 }
 
-func (self *server) handleConnect(conn net.Conn) (flow int, err error) {
+func (self *Server) handleConnect(conn net.Conn) (flow int, err error) {
 
 	defer func () {
 		conn.Close()
@@ -193,79 +201,4 @@ func (self *server) handleConnect(conn net.Conn) (flow int, err error) {
 	return
 }
 
-func (self *server) OverFlow() bool {
-	return self.Current > self.Limit
-}
 
-func (self *server) increase(key string, incr int) (score int64, err error) {
-	score, err = self.store.IncrSize(key, incr)
-	return
-}
-
-func (self *server) getKeyBy(k int) (key string) {
-
-	var year, month, day, hour int
-	now := time.Now()
-	year = now.Year()
-	month = int(now.Month())
-	day = now.Day()
-	hour = now.Hour()
-
-	switch k {
-	case Hour:
-		key = fmt.Sprintf("%s:%d:%d:%d:%d", self.Port, year, month, day, hour)
-	case Day:
-		key = fmt.Sprintf("%s:%d:%d:%d", self.Port, year, month, day)
-	case Month:
-		key = fmt.Sprintf("%s:%d:%d", self.Port, year, month)
-	case Year:
-		key = fmt.Sprintf("%s:%d", self.Port, year)
-	default:
-
-	}
-	return
-}
-
-func (self *server) Config() (port, method, password string, timeout int64) {
-	port = self.Port
-	method = self.Method
-	password = self.Password
-	timeout = self.Timeout
-	return
-}
-
-func (self *server) IncreaseByHour(incr int) (score int64, err error) {
-	key := self.getKeyBy(Hour)
-	if key != "" {
-		return
-	}
-	score, err = self.increase(key, incr)
-	return
-}
-
-func (self *server) IncreaseByDay(incr int) (score int64, err error) {
-	key := self.getKeyBy(Day)
-	if key != "" {
-		return
-	}
-	score, err = self.increase(key, incr)
-	return
-}
-
-func (self *server) IncreaseByMonth(incr int) (score int64, err error) {
-	key := self.getKeyBy(Month)
-	if key != "" {
-		return
-	}
-	score, err = self.increase(key, incr)
-	return
-}
-
-func (self *server) IncreaseByYear(incr int) (score int64, err error) {
-	key := self.getKeyBy(Year)
-	if key != "" {
-		return
-	}
-	score, err = self.increase(key, incr)
-	return
-}
