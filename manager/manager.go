@@ -6,6 +6,7 @@ import (
 	"sync"
 	"encoding/json"
 	"io"
+	"fmt"
 )
 
 type Manager struct {
@@ -15,12 +16,12 @@ type Manager struct {
 	store *Storage
 }
 
-var log Verbose
+var Log Verbose
 
 
 func New(host, password string, verbose bool) (manager *Manager, err error) {
 
-	log = Verbose(verbose)
+	Log = Verbose(verbose)
 	manager = &Manager{}
 	manager.servers = make(map[string]*Server)
 
@@ -50,20 +51,112 @@ func (self *Manager) doWithLock(fn func()) {
 	fn()
 }
 
+func (self *Manager) Debug(err error) {
+	if err !=nil {
+		Log.Debug(err.Error())
+	}
+}
+
 //private method for Manager instance
 func (self *Manager) hasServer(port string) bool {
 	_, ok := self.servers[port]
 	return ok
 }
 
+func (self *Manager) validServer(port string) (err error) {
+	if !self.hasServer(port) {
+		err = newError("There is no proxy server listened on the port: %s", port)
+	}
+	return
+}
+
+
+//api util
+//operate servers from redis
+func (self *Manager) getServerFromRedis(port string) (server *Server, err error) {
+	server, err =  self.store.GetServer(serverPrefix + port)
+	if err != nil {
+		return
+	}
+	err = server.initServer(self)
+	return
+}
+
+func (self *Manager) getServersFromRedis(ports ...string) (servers []*Server, err error) {
+	if len(ports) == 0 {
+		err = newError("Need port but port is nil")
+		return
+	}
+	for _, port := range ports {
+		if server, er := self.getServerFromRedis(port); er == nil {
+			servers = append(servers, server)
+			self.Debug(er)
+		}
+	}
+	return
+}
+
+func (self *Manager) getAllServersFromRedis() (servers []*Server, err error) {
+	servers, err =  self.store.GetServers(serverPrefix + "**")
+	if err != nil {
+		return
+	}
+	for _, server := range servers {
+		err = server.initServer(self)
+	}
+	return
+}
+
+func (self *Manager) addServerToRedis(server *Server) (err error) {
+	err = self.store.SetServer(serverPrefix + server.Port, server)
+	return
+}
+
+func (self *Manager) addServersToRedis(servers []*Server) (err error) {
+	for _, server := range servers {
+		err = self.addServerToRedis(server)
+	}
+	return
+}
+
+func (self *Manager) delServerFromRedis(port string) (err error) {
+	err =  self.store.DelServer(serverPrefix + port)
+	return
+}
+
+func (self *Manager) delServersFromRedis(ports ...string) (err error) {
+	if len(ports) == 0 {
+		err = newError("Need port but port is nil")
+		return
+	}
+	for _, port := range ports {
+		er := self.delServerFromRedis(port)
+		self.Debug(er)
+	}
+	return
+}
+
+func (self *Manager) delAllServersFromRedis() (err error) {
+	keys, err := self.store.Keys(serverPrefix + "**")
+	if err != nil {
+		return
+	}
+	for _, key := range keys {
+		er := self.store.DelServer(key)
+		self.Debug(er)
+	}
+	return
+}
 
 //operate servers from manager
 func (self *Manager) getServerFromManager(port string) (server *Server, err error) {
-	if !self.hasServer(port) {
-		err = newError("There is no proxy server listened on the port: %s", port)
+	err = self.validServer(port)
+	if err != nil {
 		return
 	}
-	server = self.servers[port]
+	self.doWithLock(func () {
+		server = self.servers[port]
+	})
 	return
 }
 
@@ -72,9 +165,11 @@ func (self *Manager) getServersFromManager(ports ...string) (servers []*Server, 
 		err = newError("Need port but port is nil")
 		return
 	}
+
 	for _, port := range ports {
-		if server, _ := self.getServerFromManager(port); server != nil {
+		if server, er := self.getServerFromManager(port); er == nil {
 			servers = append(servers, server)
+			self.Debug(er)
 		}
 	}
 	return
@@ -97,7 +192,9 @@ func (self *Manager) addServerToManager(server *Server) (err error) {
 			err = newError("Add proxy server to manager failed: proxy server has existed on port: %s", server.Port)
 			return
 		}
-		self.servers[server.Port] = server
+		self.doWithLock(func () {
+			self.servers[server.Port] = server
+		})
 	})
 	return
 }
@@ -109,55 +206,49 @@ func (self *Manager) addServersToManager(servers []*Server) (err error) {
 	return
 }
 
-//operate servers from redis
-func (self *Manager) getServerFromRedis(port string) (server *Server, err error) {
-	server, err =  self.store.GetServer(serverPrefix + port)
+func (self *Manager) delServerFromManager(port string) (server *Server, err error) {
+	err = self.validServer(port)
 	if err != nil {
 		return
 	}
-	err = server.initServer()
+	server = self.servers[port]
+	err = server.Destroy()
+	self.doWithLock(func () {
+		delete(self.servers, port)
+	})
 	return
 }
 
-func (self *Manager) getServersFromRedis(ports ...string) (servers []*Server, err error) {
+func (self *Manager) delServersFromManager(ports ...string) (servers []*Server, err error) {
 	if len(ports) == 0 {
 		err = newError("Need port but port is nil")
 		return
 	}
+
+	var er error
 	for _, port := range ports {
-		if server, err := self.getServerFromRedis(port); err == nil {
-			servers = append(servers, server)
-		}
+		servers, er = self.getServersFromManager(port...)
+		self.Debug(er)
+		er = self.delServerFromManager(port)
+		self.Debug(er)
 	}
 	return
 }
 
-func (self *Manager) getAllServersFromRedis() (servers []*Server, err error) {
-	servers, err =  self.store.GetServers(serverPrefix + "**")
-	if err != nil {
-		return
-	}
-	for _, server := range servers {
-		err = server.initServer()
-	}
-	self.addServersToManager(servers)
-	return
-}
+func (self *Manager) delAllServersFromManager() (servers []*Server, err error) {
 
-func (self *Manager) addServerToRedis(server *Server) (err error) {
-	err = self.store.SetServer("server:" + server.Port, server)
-	return
-}
-
-func (self *Manager) addServersToRedis(servers []*Server) (err error) {
-	for _, server := range servers {
-		err = self.addServerToRedis(server)
+	var er error
+	for port, _ := range self.servers {
+		servers, er = self.delServerFromManager(port)
+		self.Debug(er)
 	}
 	return
 }
 
-//API
+
+//TODO: API
 //request with json content
+//POST /api/servers
 func (self *Manager) CreateServerFromBody(body io.Reader) (server *Server, err error) {
 	decoder := json.NewDecoder(body)
 	err = decoder.Decode(server)
@@ -165,62 +256,57 @@ func (self *Manager) CreateServerFromBody(body io.Reader) (server *Server, err e
 		err = newError(err.Error())
 		return
 	}
-	err = server.initServer()
-	return
-}
-
-
-func (self *Manager) StartServer(port string) (err error) {
-	defer func() {
-		if err != nil {
-			log.Debug(err.Error())
-		}
-	}()
-
-	if server, err := self.getServerFromManager(port); err == nil {
-		err = server.Start()
-	}
-	return
-}
-//stop a started server
-func (self *Manager) StopServer(port string) (err error) {
-	defer func() {
-		if err != nil {
-			log.Debug(err.Error())
-		}
-	}()
-
-	if server, err := self.getServerFromManager(port); err == nil {
-		err = server.Stop()
-	}
-	return
-}
-
-//drop a existed listener
-func (self *Manager) DestroyServer(port string) (err error) {
-	defer func() {
-		if err != nil {
-			log.Debug(err.Error())
-		}
-	}()
-
-
-	server, err := self.getServerFromManager(port)
+	err = server.initServer(self)
 	if err != nil {
 		return
 	}
-
-	err = server.Destroy()
-	//cannot delete the server which close failed
+	err = self.addServerToManager(server)
 	if err != nil {
 		return
 	}
-
-	self.doWithLock(func() {
-		delete(self.servers, port)
-	})
+	err = self.addServerToRedis(server)
 	return
 }
 
+func (self *Manager) CreateServerFromArgs(port, method, password string, limit, timeout int64) (server *Server, err error) {
+	server, err = newServer(port, method, password, limit, timeout, self)
+	if err != nil {
+		return
+	}
+	fmt.Println("here")
+	err = self.addServerToManager(server)
 
+	if err != nil {
+		return
+	}
+	err = self.addServerToRedis(server)
+	return
+}
 
+//GET /api/servers
+func (self *Manager) All() (servers []*Server, err error)  {
+	servers, err = self.getAllServersFromManager()
+	return
+}
+
+//GET /api/servers/:id select
+func (self *Manager) Show(id string) (server *Server, err error) {
+	server, err = self.getServerFromManager(id)
+	return
+}
+
+//DEL /api/servers/:id delete
+func (self *Manager) Delete(id string) (server *Server, err error) {
+	server, err = self.delServerFromManager(id)
+	return
+}
+
+//PUT /api/servers/:id update
+func (self *Manager) Update(id string, body io.Reader) (server *Server, err error) {
+	server, err = self.Delete(id)
+	if err != nil {
+		return
+	}
+	server, err = self.CreateServerFromBody(body)
+	return
+}

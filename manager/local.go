@@ -257,7 +257,7 @@ func pipeThenClose(src, dst conn) (total int, raw_header []byte) {
 	for {
 		src.setTimeOut()
 		n, err := src.Read(buf)
-		log.Info(string(buf))
+		Log.Info(string(buf))
 		// read may return EOF with n > 0
 		// should always process n > 0 bytes before handling error
 		if n > 0 {

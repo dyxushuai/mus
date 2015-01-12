@@ -36,11 +36,11 @@ type Server struct {
 	format        string
 	started       bool
 	cipher        *ss.Cipher
-	store         *Storage
+	manager       *Manager
 }
 
 
-func newServer(port, method, password string, limit, timeout int64, redis *Storage) (server *Server,err error) {
+func newServer(port, method, password string, limit, timeout int64, father *Manager) (server *Server,err error) {
 	if port == "" {
 		err = newError("Cannot create a server without port")
 		return
@@ -56,15 +56,13 @@ func newServer(port, method, password string, limit, timeout int64, redis *Stora
 		comChan: make(ComChan),
 		local: make(map[string]*local),
 		started: false,
-		store: redis,
 	}
 
-	err = server.initServer()
+	err = server.initServer(father)
 	return
 }
 
-
-func (self *Server) initServer() (err error) {
+func (self *Server) initServer(father *Manager) (err error) {
 	errFormat := fmt.Sprintf(serverFormat, self.Port)
 	ln, err := net.Listen("tcp", ":" + self.Port)
 	if err != nil {
@@ -81,8 +79,10 @@ func (self *Server) initServer() (err error) {
 	self.format = errFormat
 	self.listener = ln
 	self.cipher = cipher
+	self.manager = father
 	return
 }
+
 
 func (self *Server) doWithLock(fn func()) {
 	self.mu.Lock()
@@ -133,6 +133,7 @@ func (self *Server) Destroy() (err error) {
 func (self *Server) Start() (err error) {
 	if self.isStarted() {
 		err = newError(self.format, "run server error:", "has started")
+		return
 	}
 	go func () {
 		self.listen()
@@ -142,24 +143,24 @@ func (self *Server) Start() (err error) {
 
 //stop the loop
 func (self *Server) Stop() (err error) {
-	if self.isStarted() {
-		go func() {
-			select {
-			case self.comChan <- STOP:
-			}
-		}()
-	} else {
+	if !self.isStarted() {
 		err = newError(self.format, "run server error:", "has stopped")
+		return
 	}
+	go func() {
+		select {
+		case self.comChan <- STOP:
+		}
+	}()
 	return
 }
 
 func (self *Server) listen() {
 	self.started = true
-	log.Info("server at port: %s started", self.Port)
+	Log.Info("server at port: %s started", self.Port)
 	defer func() {
 		self.started = false
-		log.Info("server at port: %s stoped", self.Port)
+		Log.Info("server at port: %s stoped", self.Port)
 	}()
 loop:
 	for {
@@ -175,7 +176,7 @@ loop:
 		conn, err := self.listener.Accept()
 		if err != nil {
 			err = newError(self.format, "listener accpet error:", err)
-			log.Debug(err.Error())
+			Log.Debug(err.Error())
 			continue
 		}
 		go func() {
@@ -183,7 +184,7 @@ loop:
 			//TODO: use `flow`
 			_ = flow
 			if er != nil {
-				log.Debug(er.Error())
+				Log.Debug(er.Error())
 			}
 		}()
 

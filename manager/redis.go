@@ -51,17 +51,21 @@ func (self * Storage) Test() (err error) {
 	_, err = self.doWithConn("PING")
 	return
 }
-//remove PREFIX form key if it has
-func removePrefix(key string) string {
+//add PREFIX to key
+func addPrefix(key string) string {
 	if strings.HasPrefix(key, PREFIX) {
-		return strings.Replace(key, PREFIX, "", 1)
+		return key
 	}
-	return key
+	return PREFIX + key
 }
 
 func (self *Storage) doWithConn(keyName string, arg... interface {}) (reply interface{}, err error) {
 	conn := self.pool.Get()
 	defer conn.Close()
+	if key, ok := arg[0].(string); ok {
+		key = addPrefix(key)
+		arg[0] = key
+	}
 	reply, err = conn.Do(keyName, arg...)
 	if err != nil {
 		err = newError(err.Error())
@@ -94,12 +98,12 @@ func (self *Storage) getKeyBy(k int, id string) (key string) {
 }
 
 func (self *Storage) Keys(pat string) (keys []string, err error) {
-	keys, err = redis.Strings(self.doWithConn("KEYS", PREFIX + pat))
+	keys, err = redis.Strings(self.doWithConn("KEYS", pat))
 	return
 }
 
 func (self *Storage) GetServer(key string) (server *Server, err error) {
-	data, err := redis.Bytes(self.doWithConn("GET", PREFIX + key))
+	data, err := redis.Bytes(self.doWithConn("GET", key))
 
 	err = json.Unmarshal(data, &server)
 	return
@@ -112,7 +116,6 @@ func (self *Storage) GetServers(pat string) (servers []*Server, err error) {
 		return
 	}
 	for _, key := range keys {
-		key = removePrefix(key)
 		if server, err := self.GetServer(key); err == nil {
 			servers = append(servers, server)
 		}
@@ -129,13 +132,18 @@ func (self *Storage) SetServer(key string, server *Server) (err error) {
 	return
 }
 
+func (self *Storage) DelServer(key string) (err error) {
+	_, err = self.doWithConn("DEL", key)
+	return
+}
+
 func (self *Storage) IncrSize(key string, incr int) (score int64, err error) {
-	score, err = redis.Int64(self.doWithConn("INCRBY", PREFIX + key, incr))
+	score, err = redis.Int64(self.doWithConn("INCRBY", key, incr))
 	return
 }
 
 func (self *Storage) GetSize(key string) (score int64, err error) {
-	score, err = redis.Int64(self.doWithConn("GET", PREFIX + key))
+	score, err = redis.Int64(self.doWithConn("GET", key))
 	return
 }
 
