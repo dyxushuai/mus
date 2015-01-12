@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"encoding/json"
 	"strings"
-	"github.com/JohnSmithX/mus/config"
 )
 
 const (
-	PREFIX = config.REDIS_PREFIX
+	PREFIX = "mus:"
 	Hour = iota
 	Day
 	Month
@@ -49,7 +48,7 @@ func NewStorage(server, password string) (s *Storage) {
 }
 
 func (self * Storage) Test() (err error) {
-	_, err = self.withConnDo("PING")
+	_, err = self.doWithConn("PING")
 	return
 }
 //remove PREFIX form key if it has
@@ -60,10 +59,13 @@ func removePrefix(key string) string {
 	return key
 }
 
-func (self *Storage) withConnDo(keyName string, arg... interface {}) (reply interface{}, err error) {
+func (self *Storage) doWithConn(keyName string, arg... interface {}) (reply interface{}, err error) {
 	conn := self.pool.Get()
 	defer conn.Close()
 	reply, err = conn.Do(keyName, arg...)
+	if err != nil {
+		err = newError(err.Error())
+	}
 	return
 }
 
@@ -92,12 +94,12 @@ func (self *Storage) getKeyBy(k int, id string) (key string) {
 }
 
 func (self *Storage) Keys(pat string) (keys []string, err error) {
-	keys, err = redis.Strings(self.withConnDo("KEYS", PREFIX + pat))
+	keys, err = redis.Strings(self.doWithConn("KEYS", PREFIX + pat))
 	return
 }
 
 func (self *Storage) GetServer(key string) (server *Server, err error) {
-	data, err := redis.Bytes(self.withConnDo("GET", PREFIX + key))
+	data, err := redis.Bytes(self.doWithConn("GET", PREFIX + key))
 
 	err = json.Unmarshal(data, &server)
 	return
@@ -118,18 +120,22 @@ func (self *Storage) GetServers(pat string) (servers []*Server, err error) {
 	return
 }
 
-func (self *Storage) SetServer(key string, data []byte) (err error) {
-	_, err = self.withConnDo("SET", key, data)
+func (self *Storage) SetServer(key string, server *Server) (err error) {
+	data, err := json.Marshal(server)
+	if err != nil {
+		return
+	}
+	_, err = self.doWithConn("SET", key, data)
 	return
 }
 
 func (self *Storage) IncrSize(key string, incr int) (score int64, err error) {
-	score, err = redis.Int64(self.withConnDo("INCRBY", PREFIX + key, incr))
+	score, err = redis.Int64(self.doWithConn("INCRBY", PREFIX + key, incr))
 	return
 }
 
 func (self *Storage) GetSize(key string) (score int64, err error) {
-	score, err = redis.Int64(self.withConnDo("GET", PREFIX + key))
+	score, err = redis.Int64(self.doWithConn("GET", PREFIX + key))
 	return
 }
 

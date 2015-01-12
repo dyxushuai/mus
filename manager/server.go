@@ -39,23 +39,10 @@ type Server struct {
 	store         *Storage
 }
 
-func newServer(port, method, password string, limit, timeout int64, redis *Storage) (server *Server,err error) {
 
+func newServer(port, method, password string, limit, timeout int64, redis *Storage) (server *Server,err error) {
 	if port == "" {
 		err = newError("Cannot create a server without port")
-		return
-	}
-
-	errFormat := fmt.Sprintf(serverFormat, port)
-	ln, err := net.Listen("tcp", ":" + port)
-	if err != nil {
-		err = newError(errFormat, "create listner error:", err)
-		return
-	}
-
-	cipher, err := ss.NewCipher(method, password)
-	if err != nil {
-		err = newError(errFormat, "create cipher error:", err)
 		return
 	}
 
@@ -66,19 +53,38 @@ func newServer(port, method, password string, limit, timeout int64, redis *Stora
 		Timeout: timeout,
 		Current: 0,
 		Limit: limit,
-		listener: ln,
 		comChan: make(ComChan),
 		local: make(map[string]*local),
-		format: errFormat,
 		started: false,
-		cipher: cipher,
 		store: redis,
 	}
 
+	err = server.initServer()
 	return
 }
 
-func (self *Server) withLockDo(fn func()) {
+
+func (self *Server) initServer() (err error) {
+	errFormat := fmt.Sprintf(serverFormat, self.Port)
+	ln, err := net.Listen("tcp", ":" + self.Port)
+	if err != nil {
+		err = newError(errFormat, "create listner error:", err)
+		return
+	}
+
+	cipher, err := ss.NewCipher(self.Method, self.Password)
+	if err != nil {
+		err = newError(errFormat, "create cipher error:", err)
+		return
+	}
+
+	self.format = errFormat
+	self.listener = ln
+	self.cipher = cipher
+	return
+}
+
+func (self *Server) doWithLock(fn func()) {
 	self.mu.Lock()
 	defer self.mu.Unlock()
 	fn()
@@ -96,7 +102,7 @@ func (self *Server) addLocal(conn net.Conn) (local *local, err error) {
 	}
 
 	ip := strings.Split(conn.RemoteAddr().String(), ":")[0]
-	self.withLockDo(func() {
+	self.doWithLock(func() {
 		self.local[ip] = local
 	})
 
@@ -111,7 +117,7 @@ func (self *Server) isOverFlow() bool {
 	return self.Current > self.Limit
 }
 
-func (self *Server) Close() (err error) {
+func (self *Server) Destroy() (err error) {
 	//first stop the loop
 	//second close the chan
 	//third close the listener
@@ -125,30 +131,30 @@ func (self *Server) Close() (err error) {
 }
 
 func (self *Server) Start() (err error) {
-	if self.started {
+	if self.isStarted() {
 		err = newError(self.format, "run server error:", "has started")
 	}
-	go func() {
-		err := self.listen()
-		if err != nil {
-			return
-		}
+	go func () {
+		self.listen()
 	}()
 	return
 }
 
 //stop the loop
-func (self *Server) Stop() {
-	if !self.isStarted() {
+func (self *Server) Stop() (err error) {
+	if self.isStarted() {
 		go func() {
 			select {
 			case self.comChan <- STOP:
 			}
 		}()
+	} else {
+		err = newError(self.format, "run server error:", "has stopped")
 	}
+	return
 }
 
-func (self *Server) listen() (err error) {
+func (self *Server) listen() {
 	self.started = true
 	log.Info("server at port: %s started", self.Port)
 	defer func() {
@@ -173,11 +179,11 @@ loop:
 			continue
 		}
 		go func() {
-			flow, err := self.handleConnect(conn)
+			flow, er := self.handleConnect(conn)
 			//TODO: use `flow`
 			_ = flow
-			if err != nil {
-				log.Debug(err.Error())
+			if er != nil {
+				log.Debug(er.Error())
 			}
 		}()
 

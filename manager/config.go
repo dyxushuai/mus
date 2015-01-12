@@ -22,3 +22,9 @@ const (
 const (
 	localFormat string = "local: %s : %%s %%v"
 )
+
+//redis config
+const (
+	serverPrefix = "server:"
+	flowPrefix = "flow:"
+)

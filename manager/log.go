@@ -4,10 +4,18 @@ package manager
 
 import (
 	goLog "github.com/segmentio/go-log"
+	"os"
 )
 
 
 type Verbose bool
+
+
+var logger *goLog.Logger
+
+func init() {
+	logger = goLog.New(os.Stderr, goLog.DEBUG, "")
+}
 
 func (self Verbose) withVerboseDo(fn func()) {
 	if self == true {
@@ -17,7 +25,7 @@ func (self Verbose) withVerboseDo(fn func()) {
 
 func (self *Verbose) Debug(msg string, args ...interface{}) (err error) {
 	self.withVerboseDo(func() {
-		err = goLog.Debug(msg, args...)
+		err = logger.Debug(msg, args...)
 	})
 	return
 }
@@ -25,7 +33,7 @@ func (self *Verbose) Debug(msg string, args ...interface{}) (err error) {
 // Info log.
 func (self *Verbose) Info(msg string, args ...interface{}) (err error) {
 	self.withVerboseDo(func() {
-		err = goLog.Info(msg, args...)
+		err = logger.Info(msg, args...)
 	})
 	return
 }
@@ -33,7 +41,7 @@ func (self *Verbose) Info(msg string, args ...interface{}) (err error) {
 // Notice log.
 func (self *Verbose) Notice(msg string, args ...interface{}) (err error) {
 	self.withVerboseDo(func() {
-		err = goLog.Notice(msg, args...)
+		err = logger.Notice(msg, args...)
 	})
 	return
 }
@@ -41,7 +49,7 @@ func (self *Verbose) Notice(msg string, args ...interface{}) (err error) {
 // Warning log.
 func (self *Verbose) Warning(msg string, args ...interface{}) (err error) {
 	self.withVerboseDo(func() {
-		err = goLog.Warning(msg, args...)
+		err = logger.Warning(msg, args...)
 	})
 	return
 }
@@ -49,7 +57,7 @@ func (self *Verbose) Warning(msg string, args ...interface{}) (err error) {
 // Error log.
 func (self *Verbose) Error(msg string, args ...interface{}) (err error) {
 	self.withVerboseDo(func() {
-		err = goLog.Error(msg, args...)
+		err = logger.Error(msg, args...)
 	})
 	return
 }
@@ -57,7 +65,7 @@ func (self *Verbose) Error(msg string, args ...interface{}) (err error) {
 // Critical log.
 func (self *Verbose) Critical(msg string, args ...interface{}) (err error) {
 	self.withVerboseDo(func() {
-		err = goLog.Critical(msg, args...)
+		err = logger.Critical(msg, args...)
 	})
 	return
 }
@@ -65,7 +73,7 @@ func (self *Verbose) Critical(msg string, args ...interface{}) (err error) {
 // Alert log.
 func (self *Verbose) Alert(msg string, args ...interface{}) (err error) {
 	self.withVerboseDo(func() {
-		err = goLog.Alert(msg, args...)
+		err = logger.Alert(msg, args...)
 	})
 	return
 }
@@ -73,7 +81,7 @@ func (self *Verbose) Alert(msg string, args ...interface{}) (err error) {
 // Emergency log.
 func (self *Verbose) Emergency(msg string, args ...interface{}) (err error) {
 	self.withVerboseDo(func() {
-		err = goLog.Emergency(msg, args...)
+		err = logger.Emergency(msg, args...)
 	})
 	return
 }
