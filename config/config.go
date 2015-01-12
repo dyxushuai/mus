@@ -1,7 +1,8 @@
 package config
 
+//redis config
 const (
-	PREFIX = "mus:"
-	REDIS_SERVER = "example.com:8000"
+	REDIS_PREFIX = "mus:"
+	REDIS_SERVER = "127.0.0.1:6379"
 	REDIS_PASSWORD = "123456"
 )

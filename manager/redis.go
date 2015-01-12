@@ -1,4 +1,4 @@
-package models
+package manager
 
 import (
 	"github.com/garyburd/redigo/redis"
@@ -6,24 +6,17 @@ import (
 	"fmt"
 	"encoding/json"
 	"strings"
+	"github.com/JohnSmithX/mus/config"
 )
 
 const (
-	PREFIX = "mus:"
+	PREFIX = config.REDIS_PREFIX
 	Hour = iota
 	Day
 	Month
 	Year
 )
 
-type Server struct {
-	Port          string       `json:"port"`
-	Method        string       `json:"method"`
-	Password      string       `json:"password"`
-	Current       int64        `json:"current"`
-	Limit         int64        `json:"limit"`
-	Timeout       int64        `json:"timeout"`
-}
 
 type Storage struct {
 	pool *redis.Pool
@@ -41,7 +34,6 @@ func NewStorage(server, password string) (s *Storage) {
 			}
 			if _, err := c.Do("AUTH", password); err != nil {
 				c.Close()
-				fmt.Println(err)
 				return nil, err
 			}
 			return c, err
@@ -56,6 +48,10 @@ func NewStorage(server, password string) (s *Storage) {
 	return
 }
 
+func (self * Storage) Test() (err error) {
+	_, err = self.withConnDo("PING")
+	return
+}
 //remove PREFIX form key if it has
 func removePrefix(key string) string {
 	if strings.HasPrefix(key, PREFIX) {
@@ -64,7 +60,7 @@ func removePrefix(key string) string {
 	return key
 }
 
-func (self * Storage) withConnDo(keyName string, arg... interface {}) (reply interface{}, err error) {
+func (self *Storage) withConnDo(keyName string, arg... interface {}) (reply interface{}, err error) {
 	conn := self.pool.Get()
 	defer conn.Close()
 	reply, err = conn.Do(keyName, arg...)

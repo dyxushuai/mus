@@ -1,4 +1,3 @@
-
 //default config
 package manager
 
@@ -19,7 +18,7 @@ const (
 )
 
 
-//
+//local config
 const (
-	localFormat string = "client: %s : %%s %%v"
+	localFormat string = "local: %s : %%s %%v"
 )

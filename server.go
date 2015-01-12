@@ -1,8 +1,6 @@
 package main
 
 import (
-	"github.com/JohnSmithX/mus/manager"
-	"net/http"
 	"github.com/JohnSmithX/mus/controllers"
 	"github.com/gohttp/app"
 	"github.com/gohttp/logger"
@@ -10,10 +8,6 @@ import (
 )
 
 func main() {
-//	m := manager.New(true)
-//
-//	m.AddServerAndRun("9090", "rc4", "123456", 1111111, 10)
-//	http.ListenAndServe(":1234", nil)
 	server := app.New()
 	server.Use(logger.New())
 	server.Use(methodoverride.New())
@@ -28,13 +22,12 @@ func main() {
 	server.Post("/api/servers/:id/start", "start :id server")
 	server.Post("/api/servers/:id/stop", "stop :id server")
 	server.Post("/api/servers/:id/restart", "restart :id server")
-	server.Post("/api/servers/:id/pause", "pause :id server")
-	server.Post("/api/servers/:id/unpause", "pause :id server")
+//	server.Post("/api/servers/:id/pause", "pause :id server")
+//	server.Post("/api/servers/:id/unpause", "pause :id server")
 
 	server.Get("/api/servers/:id/logs", "get :id server logs")
 	server.Get("/api/servers/:id/flow", "get :id server flow")
 
-
-
+	server.Listen(":8000")
 
 }

@@ -4,29 +4,40 @@ package manager
 
 import (
 	"sync"
-	"github.com/JohnSmithX/mus/models"
+	"github.com/JohnSmithX/mus/config"
+//	"fmt"
 )
 
 type Manager struct {
 	mu sync.Mutex
-	ssServers map[string]*Server //port -> ss server
+	servers map[string]*Server //port -> ss server
 	store *Storage
 }
 
 
 var log Verbose
 
+//create redis connect pool
+var storage *Storage
 
-func New(store models.Storage, verbose bool) (manager *Manager) {
-	//create redis connect pool
-	log = Verbose(verbose)
-	manager = &Manager{}
-	manager.ssServers = make(map[string]*Server)
-	manager.store = store
-	return
+
+func init() {
+	storage = NewStorage(config.REDIS_SERVER, config.REDIS_PASSWORD)
+	if err := storage.Test(); err != nil {
+		panic("connect to redis server error: " + err.Error())
+	}
 }
 
 
+
+func New(verbose bool) (manager *Manager) {
+
+	log = Verbose(verbose)
+	manager = &Manager{}
+	manager.servers = make(map[string]*Server)
+	manager.store = storage
+	return
+}
 
 
 
@@ -39,7 +50,7 @@ func (self *Manager) withLockDo(fn func()) {
 
 //private method for Manager instance
 func (self *Manager) hasServer(port string) bool {
-	_, ok := self.ssServers[port]
+	_, ok := self.servers[port]
 	return ok
 }
 
@@ -48,13 +59,13 @@ func (self *Manager) getServer(port string) (ss *Server, err error) {
 		err = newError("Thers is no proxy server listened on the port: %s", port)
 		return
 	}
-	ss = self.ssServers[port]
+	ss = self.servers[port]
 	return
 }
 
 
 
-func (self *Manager) AddServerAndRun(port, method, password string, limit, timeout int64) (err error) {
+func (self *Manager) AddServerAndStart(port, method, password string, limit, timeout int64) (err error) {
 	defer func() {
 		if err != nil {
 			log.Debug(err.Error())
@@ -81,6 +92,7 @@ func (self *Manager) AddServer(port, method, password string, limit, timeout int
 		err = newError("Add proxy server failed: proxy server has listened on port %s", port)
 		return
 	}
+
 	ss, er := newServer(port, method, password, limit, timeout, self.store)
 
 	if er != nil {
@@ -90,7 +102,7 @@ func (self *Manager) AddServer(port, method, password string, limit, timeout int
 	id = port
 
 	self.withLockDo(func() {
-		self.ssServers[port] = ss
+		self.servers[port] = ss
 	})
 	return
 }
@@ -106,7 +118,7 @@ func (self *Manager) StartServer(port string) (err error) {
 		err = newError("Start proxy server failed: no server listen on port %s", port)
 		return
 	}
-	err = self.ssServers[port].Start()
+	err = self.servers[port].Start()
 	return
 }
 //stop a started server
@@ -146,7 +158,7 @@ func (self *Manager) DropServer(port string) (err error) {
 	}
 
 	self.withLockDo(func() {
-		delete(self.ssServers, port)
+		delete(self.servers, port)
 	})
 	return
 }

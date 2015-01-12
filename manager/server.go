@@ -6,7 +6,6 @@ import (
 	"sync"
 	"fmt"
 	"strings"
-	"github.com/JohnSmithX/mus/models"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
@@ -37,10 +36,10 @@ type Server struct {
 	format        string
 	started       bool
 	cipher        *ss.Cipher
-	store         *models.Storage
+	store         *Storage
 }
 
-func newServer(port, method, password string, limit, timeout int64, redis *models.Storage) (server *Server,err error) {
+func newServer(port, method, password string, limit, timeout int64, redis *Storage) (server *Server,err error) {
 
 	if port == "" {
 		err = newError("Cannot create a server without port")
