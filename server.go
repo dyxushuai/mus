@@ -22,8 +22,6 @@ func main() {
 	server.Post("/api/servers/:id/start", "start :id server")
 	server.Post("/api/servers/:id/stop", "stop :id server")
 	server.Post("/api/servers/:id/restart", "restart :id server")
-//	server.Post("/api/servers/:id/pause", "pause :id server")
-//	server.Post("/api/servers/:id/unpause", "pause :id server")
 
 	server.Get("/api/servers/:id/logs", "get :id server logs")
 	server.Get("/api/servers/:id/flow", "get :id server flow")

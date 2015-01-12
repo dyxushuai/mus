@@ -233,3 +233,9 @@ func (self *Server) Stop() (err error) {
 	}()
 	return
 }
+
+//GET /api/servers/:id/logs
+func (self *Server) Logs() {}
+
+//GET /api/servers/:id/flow
+
