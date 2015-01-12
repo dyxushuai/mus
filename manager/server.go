@@ -53,9 +53,7 @@ func newServer(port, method, password string, limit, timeout int64, father *Mana
 		Timeout: timeout,
 		Current: 0,
 		Limit: limit,
-		comChan: make(ComChan),
-		local: make(map[string]*local),
-		started: false,
+
 	}
 
 	err = server.initServer(father)
@@ -80,6 +78,9 @@ func (self *Server) initServer(father *Manager) (err error) {
 	self.listener = ln
 	self.cipher = cipher
 	self.manager = father
+	self.comChan = make(ComChan)
+	self.local =  make(map[string]*local)
+	self.started = false
 	return
 }
 
@@ -154,21 +155,26 @@ loop:
 		default:
 		}
 
+
 		conn, err := self.listener.Accept()
 		if err != nil {
 			err = newError(self.format, "listener accpet error:", err)
-			Log.Debug(err.Error())
+			Debug(err)
 			continue
 		}
 		go func() {
 			flow, er := self.handleConnect(conn)
+
 			//TODO: use `flow`
 			if er != nil {
-				Log.Debug(er.Error())
+				Debug(er)
 				return
 			}
 			er = self.recFlow(flow)
-			Log.Debug(er.Error())
+			if er != nil {
+				Debug(er)
+				return
+			}
 		}()
 
 	}
@@ -214,6 +220,7 @@ func (self *Server) Start() (err error) {
 		err = newError(self.format, "run server error:", "has started")
 		return
 	}
+
 	go func () {
 		self.listen()
 	}()
@@ -238,4 +245,5 @@ func (self *Server) Stop() (err error) {
 func (self *Server) Logs() {}
 
 //GET /api/servers/:id/flow
+func (self *Server) Flow() {}
 

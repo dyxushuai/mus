@@ -60,10 +60,13 @@ func newLocal(sserver *Server,conn *ss.Conn) (l *local, err error) {
 }
 
 func (self *client) setTimeOut() (err error) {
+
 	if self.father.father.Timeout != 0 {
 		readTimeout := time.Duration(self.father.father.Timeout) * time.Second
 		err = self.SetReadDeadline(time.Now().Add(readTimeout))
-		err = newError(self.father.format, "client set timeout error:", err)
+		if err != nil {
+			err = newError(self.father.format, "client set timeout error:", err)
+		}
 	}
 	return
 }
@@ -125,6 +128,7 @@ func (self *client) getRemote() (rt *remote, err error) {
 	// read till we get possible domain length field
 	self.setTimeOut()
 	n, err := io.ReadAtLeast(self, buf, idDmLen+1)
+
 
 	if err != nil {
 		err = newError(self.father.format, "read domain form client error:", err)
@@ -257,7 +261,6 @@ func pipeThenClose(src, dst conn) (total int, raw_header []byte) {
 	for {
 		src.setTimeOut()
 		n, err := src.Read(buf)
-		Log.Info(string(buf))
 		// read may return EOF with n > 0
 		// should always process n > 0 bytes before handling error
 		if n > 0 {

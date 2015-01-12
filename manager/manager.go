@@ -37,6 +37,7 @@ func New(host, password string, verbose bool) (manager *Manager, err error) {
 func (self *Manager) initialize() (err error) {
 
 	servers, err := self.getAllServersFromRedis()
+
 	if err != nil {
 		return
 	}
@@ -51,7 +52,7 @@ func (self *Manager) doWithLock(fn func()) {
 	fn()
 }
 
-func (self *Manager) Debug(err error) {
+func Debug(err error) {
 	if err !=nil {
 		Log.Debug(err.Error())
 	}
@@ -90,7 +91,7 @@ func (self *Manager) getServersFromRedis(ports ...string) (servers []*Server, er
 	for _, port := range ports {
 		if server, er := self.getServerFromRedis(port); er == nil {
 			servers = append(servers, server)
-			self.Debug(er)
+			Debug(er)
 		}
 	}
 	return
@@ -131,7 +132,7 @@ func (self *Manager) delServersFromRedis(ports ...string) (err error) {
 	}
 	for _, port := range ports {
 		er := self.delServerFromRedis(port)
-		self.Debug(er)
+		Debug(er)
 	}
 	return
 }
@@ -143,7 +144,7 @@ func (self *Manager) delAllServersFromRedis() (err error) {
 	}
 	for _, key := range keys {
 		er := self.store.DelServer(key)
-		self.Debug(er)
+		Debug(er)
 	}
 	return
 }
@@ -169,7 +170,7 @@ func (self *Manager) getServersFromManager(ports ...string) (servers []*Server, 
 	for _, port := range ports {
 		if server, er := self.getServerFromManager(port); er == nil {
 			servers = append(servers, server)
-			self.Debug(er)
+			Debug(er)
 		}
 	}
 	return
@@ -187,15 +188,14 @@ func (self *Manager) getAllServersFromManager() (servers []*Server, err error) {
 }
 
 func (self *Manager) addServerToManager(server *Server) (err error) {
-	self.doWithLock(func() {
-		if self.hasServer(server.Port) {
-			err = newError("Add proxy server to manager failed: proxy server has existed on port: %s", server.Port)
-			return
-		}
-		self.doWithLock(func () {
-			self.servers[server.Port] = server
-		})
+	if self.hasServer(server.Port) {
+		err = newError("Add proxy server to manager failed: proxy server has existed on port: %s", server.Port)
+		return
+	}
+	self.doWithLock(func () {
+		self.servers[server.Port] = server
 	})
+
 	return
 }
 
@@ -224,23 +224,23 @@ func (self *Manager) delServersFromManager(ports ...string) (servers []*Server, 
 		err = newError("Need port but port is nil")
 		return
 	}
-
 	var er error
+	servers, er = self.getServersFromManager(ports...)
+	Debug(er)
 	for _, port := range ports {
-		servers, er = self.getServersFromManager(port...)
-		self.Debug(er)
-		er = self.delServerFromManager(port)
-		self.Debug(er)
+		_, er = self.delServerFromManager(port)
+		Debug(er)
 	}
 	return
 }
 
 func (self *Manager) delAllServersFromManager() (servers []*Server, err error) {
 
-	var er error
+
 	for port, _ := range self.servers {
-		servers, er = self.delServerFromManager(port)
-		self.Debug(er)
+		server, er := self.delServerFromManager(port)
+		servers = append(servers, server)
+		Debug(er)
 	}
 	return
 }

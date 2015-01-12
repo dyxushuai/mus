@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"net/http"
-	"github.com/JohnSmithX/mus/manager"
 )
 
 type ServerActionsAPI struct {
