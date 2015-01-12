@@ -117,7 +117,7 @@ func (self *Server) isOverFlow() bool {
 	return self.Current > self.Limit
 }
 
-func (self *Server) Destroy() (err error) {
+func (self *Server) destroy() (err error) {
 	//first stop the loop
 	//second close the chan
 	//third close the listener
@@ -130,28 +130,9 @@ func (self *Server) Destroy() (err error) {
 	return
 }
 
-func (self *Server) Start() (err error) {
-	if self.isStarted() {
-		err = newError(self.format, "run server error:", "has started")
-		return
-	}
-	go func () {
-		self.listen()
-	}()
-	return
-}
-
-//stop the loop
-func (self *Server) Stop() (err error) {
-	if !self.isStarted() {
-		err = newError(self.format, "run server error:", "has stopped")
-		return
-	}
-	go func() {
-		select {
-		case self.comChan <- STOP:
-		}
-	}()
+//record flow
+func (self *Server) recFlow(flow int) (err error) {
+	_, err = self.manager.store.IncrSize(flowPrefix + self.Port, flow)
 	return
 }
 
@@ -182,10 +163,12 @@ loop:
 		go func() {
 			flow, er := self.handleConnect(conn)
 			//TODO: use `flow`
-			_ = flow
 			if er != nil {
 				Log.Debug(er.Error())
+				return
 			}
+			er = self.recFlow(flow)
+			Log.Debug(er.Error())
 		}()
 
 	}
@@ -211,3 +194,42 @@ func (self *Server) handleConnect(conn net.Conn) (flow int, err error) {
 }
 
 
+
+//TODO: API
+//POST /api/servers/:id/restart
+func (self *Server) ReStart() (err error) {
+	if self.isStarted() {
+		err = self.Stop()
+		if err != nil {
+			return
+		}
+	}
+	err = self.Start()
+	return
+}
+
+//POST /api/servers/:id/start
+func (self *Server) Start() (err error) {
+	if self.isStarted() {
+		err = newError(self.format, "run server error:", "has started")
+		return
+	}
+	go func () {
+		self.listen()
+	}()
+	return
+}
+
+//POST /api/servers/:id/stop
+func (self *Server) Stop() (err error) {
+	if !self.isStarted() {
+		err = newError(self.format, "run server error:", "has stopped")
+		return
+	}
+	go func() {
+		select {
+		case self.comChan <- STOP:
+		}
+	}()
+	return
+}

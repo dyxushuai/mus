@@ -212,7 +212,7 @@ func (self *Manager) delServerFromManager(port string) (server *Server, err erro
 		return
 	}
 	server = self.servers[port]
-	err = server.Destroy()
+	err = server.destroy()
 	self.doWithLock(func () {
 		delete(self.servers, port)
 	})
