@@ -202,12 +202,14 @@ func (self *local) run() (flow int, err error) {
 			self.client.Close()
 		}
 	}()
-
+	res_size, err := self.remote.Write(self.remote.extra)
+	flow += res_size
 
 	go func() {
 		self.clientToRemote()
 	}()
-	flow, _ = self.remoteToClient()
+	size, _ := self.remoteToClient()
+	flow += size
 	closed = true
 //	if self.remote.isHttp {
 //		go func() {
