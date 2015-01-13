@@ -1,7 +1,6 @@
 package manager
 
 
-
 func Debug(err error) {
 	if err != nil {
 		Log.Debug(err.Error())

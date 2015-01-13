@@ -6,6 +6,7 @@ import (
 	"sync"
 	"encoding/json"
 	"io"
+	"github.com/JohnSmithX/mus/app/utils"
 )
 
 type Manager struct {
@@ -14,8 +15,8 @@ type Manager struct {
 	servers map[string]*Server //port -> ss server
 }
 
-var Log Verbose
-
+var Log utils.Verbose
+var newError = utils.NewError
 
 func NewManager(verbose bool) (manager *Manager) {
 

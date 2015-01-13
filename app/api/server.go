@@ -1,8 +1,11 @@
 package api
 
 import (
-	"github.com/JohnSmithX/mus/db"
-	"errors"
+	"github.com/JohnSmithX/mus/app/utils"
+	"github.com/JohnSmithX/mus/app/db"
+	"github.com/JohnSmithX/mus/app/manager"
+	"encoding/json"
+
 )
 
 const (
@@ -11,44 +14,37 @@ const (
 )
 
 type Server struct {
-	Id 				string			`json:"id"`
-	Port 			string			`json:"port"`
-	Method        	string       	`json:"method"`
-	Password      	string       	`json:"password"`
-	Limit         	int64        	`json:"limit"`
-	Timeout       	int64        	`json:"timeout"`
-	Current       	int64       	`json:"current"`
-	Create			db.JsonTime		`json:"create_at"`
-	Update			db.JsonTime		`json:"update_at"`
+	manager.Manager
+	Id 				string				`json:"id"`
+	Create			utils.JsonTime		`json:"create_at"`
+	Update			utils.JsonTime		`json:"update_at"`
 }
 
 
-
-var store = db.NewStorage()
-
 //operate servers from redis
-func  GetServerFromRedis(port string) (server *Server, err error) {
-	server, err =  self.store.GetServer(serverPrefix + port)
+func GetServerFromRedis(store *db.Storage, port string) (server *Server, err error) {
+	server, err =  store.GetServer(serverPrefix + port)
+
 	if err != nil {
 		return
 	}
-	size, err := self.store.GetSize(flowPrefix + port)
+	size, err := store.GetSize(flowPrefix + port)
 	if err == nil {
 		server.current = 0
 	} else {
 		server.current = size
 	}
-	err = server.initServer(self)
+	err = server.initServer()
 	return
 }
 
-func (self *Server) getServersFromRedis(ports ...string) (servers []*Server, err error) {
+func GetServersFromRedis(store *db.Storage, ports ...string) (servers []*Server, err error) {
 	if len(ports) == 0 {
-		err = errors.New("Need port but port is nil")
+		err = utils.NewError("Need port but port is nil")
 		return
 	}
 	for _, port := range ports {
-		if server, er := self.getServerFromRedis(string(port)); er == nil {
+		if server, er := GetServerFromRedis(store, string(port)); er == nil {
 			servers = append(servers, server)
 			Debug(er)
 		}
@@ -56,53 +52,54 @@ func (self *Server) getServersFromRedis(ports ...string) (servers []*Server, err
 	return
 }
 
-func (self *Server) getAllServersFromRedis() (servers []*Server, err error) {
-	servers, err =  self.store.GetServers(serverPrefix + "**")
+func GetAllServersFromRedis(store *db.Storage, ) (servers []*Server, err error) {
+	servers, err =  store.GetServers(serverPrefix + "**")
 	if err != nil {
 		return
 	}
 	for _, server := range servers {
-		err = server.initServer(self)
+		err = server.initServer()
 	}
 	return
 }
 
-func (self *Server) addServerToRedis(server *Server) (err error) {
-	err = self.store.SetServer(serverPrefix + server.Port, server)
+func  AddServerToRedis(store *db.Storage, server *Server) (err error) {
+	data, err := json.Marshal(server)
+	err = store.SetServer(serverPrefix + server.Port, data)
 	return
 }
 
-func (self *Server) addServersToRedis(servers []*Server) (err error) {
+func  addServersToRedis(store *db.Storage, servers []*Server) (err error) {
 	for _, server := range servers {
-		err = self.addServerToRedis(server)
+		err = AddServerToRedis(store, server)
 	}
 	return
 }
 
-func (self *Server) delServerFromRedis(port string) (err error) {
-	err =  self.store.DelServer(serverPrefix + port)
+func  DelServerFromRedis(store *db.Storage, port string) (err error) {
+	err =  store.DelServer(serverPrefix + port)
 	return
 }
 
-func (self *Server) delServersFromRedis(ports ...string) (err error) {
+func  DelServersFromRedis(store *db.Storage, ports ...string) (err error) {
 	if len(ports) == 0 {
-		err = errors.New("Need port but port is nil")
+		err = utils.NewError("Need port but port is nil")
 		return
 	}
 	for _, port := range ports {
-		er := self.delServerFromRedis(port)
+		er := DelServerFromRedis(store, string(port))
 		Debug(er)
 	}
 	return
 }
 
-func (self *Server) delAllServersFromRedis() (err error) {
-	keys, err := self.store.Keys(serverPrefix + "**")
+func  delAllServersFromRedis(store *db.Storage, ) (err error) {
+	keys, err := store.Keys(serverPrefix + "**")
 	if err != nil {
 		return
 	}
 	for _, key := range keys {
-		er := self.store.DelServer(key)
+		er := store.DelServer(key)
 		Debug(er)
 	}
 	return

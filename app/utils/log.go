@@ -1,6 +1,4 @@
-//wrapped error type
-
-package manager
+package utils
 
 import (
 	goLog "github.com/segmentio/go-log"

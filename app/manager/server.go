@@ -23,18 +23,19 @@ const (
 type Server struct {
 	mu sync.Mutex
 
-	port          string
-	method        string
-	password      string
-	limit         int64
-	timeout       int64
-	current       int64       	//current flow size
-	listener      net.Listener
-	comChan       ComChan          	//command channel
-	local		  map[string]*local //1 to 1 : remote addr -> local
-	format        string
-	started       bool
-	cipher        *ss.Cipher
+	Port 			string			`json:"port"`
+	Method       	string       	`json:"method"`
+	Password      	string       	`json:"password"`
+	Limit         	int64        	`json:"limit"`
+	Timeout       	int64        	`json:"timeout"`
+	Current       	int64       	`json:"current"`
+	Started			bool			`json:"started"`// the state of server
+	
+	listener      	net.Listener
+	comChan       	ComChan          	//command channel
+	local		  	map[string]*local //1 to 1 : remote addr -> local
+	format        	string
+	cipher        	*ss.Cipher
 }
 
 
@@ -45,12 +46,12 @@ func NewServer(port, method, password string, limit, timeout int64) (server *Ser
 	}
 
 	server = &Server{
-		port: port,
-		method: method,
-		password: password,
-		timeout: timeout,
-		limit: limit,
-		current: 0,
+		Port: port,
+		Method: method,
+		Password: password,
+		Timeout: timeout,
+		Limit: limit,
+		Current: 0,
 	}
 
 	err = server.initServer()
@@ -58,14 +59,14 @@ func NewServer(port, method, password string, limit, timeout int64) (server *Ser
 }
 
 func (self *Server) initServer() (err error) {
-	errFormat := fmt.Sprintf(serverFormat, self.port)
-	ln, err := net.Listen("tcp", ":" + self.port)
+	errFormat := fmt.Sprintf(serverFormat, self.Port)
+	ln, err := net.Listen("tcp", ":" + self.Port)
 	if err != nil {
 		err = newError(errFormat, "create listner error:", err)
 		return
 	}
 
-	cipher, err := ss.NewCipher(self.method, self.password)
+	cipher, err := ss.NewCipher(self.Method, self.Password)
 	if err != nil {
 		err = newError(errFormat, "create cipher error:", err)
 		return
@@ -76,7 +77,7 @@ func (self *Server) initServer() (err error) {
 	self.cipher = cipher
 	self.comChan = make(ComChan)
 	self.local =  make(map[string]*local)
-	self.started = false
+	self.Started = false
 	return
 }
 
@@ -106,11 +107,11 @@ func (self *Server) addLocal(conn net.Conn) (local *local, err error) {
 }
 
 func (self *Server) isStarted() bool {
-	return self.started
+	return self.Started
 }
 
 func (self *Server) isOverFlow() bool {
-	return self.current > self.limit
+	return self.Current > self.Limit
 }
 
 func (self *Server) destroy() (err error) {
@@ -125,18 +126,18 @@ func (self *Server) destroy() (err error) {
 	}
 	return
 }
-//record flow
-func (self *Server) recFlow(flow int) (err error) {
+
+func (self *Server) addFlow(flow int) (err error) {
 	self.current += int64(flow)
 	return
 }
 
 func (self *Server) listen() {
-	self.started = true
-	Log.Info("server at port: %s started", self.port)
+	self.Started = true
+	Log.Info("server at port: %s started", self.Port)
 	defer func() {
-		self.started = false
-		Log.Info("server at port: %s stoped", self.port)
+		self.Started = false
+		Log.Info("server at port: %s stoped", self.Port)
 	}()
 loop:
 	for {
@@ -182,8 +183,8 @@ func (self *Server) handleConnect(conn net.Conn) (flow int, err error) {
 	if err != nil {
 		return
 	}
-	//record flow
-	err = self.recFlow(flow)
+
+	err = self.addFlow(flow)
 	return
 }
 

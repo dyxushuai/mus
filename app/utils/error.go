@@ -1,14 +1,12 @@
 //wrapped error type
 
-package manager
+package utils
 
 import (
-
 	"github.com/dropbox/godropbox/errors"
 )
 
-
-func newError(format string, a ...interface{}) errors.DropboxError {
+func NewError(format string, a ...interface{}) errors.DropboxError {
 	return errors.Newf(format, a...)
 }
 
