@@ -13,49 +13,25 @@ type Manager struct {
 	mu sync.Mutex
 	verbose bool
 	servers map[string]*Server //port -> ss server
-	store *Storage
 }
 
 var Log Verbose
 
 
-func New(host, password string, verbose bool) (manager *Manager, err error) {
+func NewManager(verbose bool) (manager *Manager) {
 
 	Log = Verbose(verbose)
 	manager = &Manager{}
 	manager.servers = make(map[string]*Server)
-
-	//create redis connect pool
-	manager.store = NewStorage(host, password)
-	err = manager.initialize()
 	return
 }
 
-//initialize when call `New`
-//first get all servers from redis
-//add them to manager
-func (self *Manager) initialize() (err error) {
-
-	servers, err := self.getAllServersFromRedis()
-
-	if err != nil {
-		return
-	}
-	err = self.addServersToManager(servers)
-	return
-}
 
 //wrap lock method
 func (self *Manager) doWithLock(fn func()) {
 	self.mu.Lock()
 	defer self.mu.Unlock()
 	fn()
-}
-
-func Debug(err error) {
-	if err !=nil {
-		Log.Debug(err.Error())
-	}
 }
 
 //private method for Manager instance
@@ -71,83 +47,6 @@ func (self *Manager) validServer(port string) (err error) {
 	return
 }
 
-
-//api util
-//operate servers from redis
-func (self *Manager) getServerFromRedis(port string) (server *Server, err error) {
-	server, err =  self.store.GetServer(serverPrefix + port)
-	if err != nil {
-		return
-	}
-	err = server.initServer(self)
-	return
-}
-
-func (self *Manager) getServersFromRedis(ports ...string) (servers []*Server, err error) {
-	if len(ports) == 0 {
-		err = newError("Need port but port is nil")
-		return
-	}
-	for _, port := range ports {
-		if server, er := self.getServerFromRedis(port); er == nil {
-			servers = append(servers, server)
-			Debug(er)
-		}
-	}
-	return
-}
-
-func (self *Manager) getAllServersFromRedis() (servers []*Server, err error) {
-	servers, err =  self.store.GetServers(serverPrefix + "**")
-	if err != nil {
-		return
-	}
-	for _, server := range servers {
-		err = server.initServer(self)
-	}
-	return
-}
-
-func (self *Manager) addServerToRedis(server *Server) (err error) {
-	err = self.store.SetServer(serverPrefix + server.Port, server)
-	return
-}
-
-func (self *Manager) addServersToRedis(servers []*Server) (err error) {
-	for _, server := range servers {
-		err = self.addServerToRedis(server)
-	}
-	return
-}
-
-func (self *Manager) delServerFromRedis(port string) (err error) {
-	err =  self.store.DelServer(serverPrefix + port)
-	return
-}
-
-func (self *Manager) delServersFromRedis(ports ...string) (err error) {
-	if len(ports) == 0 {
-		err = newError("Need port but port is nil")
-		return
-	}
-	for _, port := range ports {
-		er := self.delServerFromRedis(port)
-		Debug(er)
-	}
-	return
-}
-
-func (self *Manager) delAllServersFromRedis() (err error) {
-	keys, err := self.store.Keys(serverPrefix + "**")
-	if err != nil {
-		return
-	}
-	for _, key := range keys {
-		er := self.store.DelServer(key)
-		Debug(er)
-	}
-	return
-}
 
 //operate servers from manager
 func (self *Manager) getServerFromManager(port string) (server *Server, err error) {
@@ -268,20 +167,6 @@ func (self *Manager) CreateServerFromBody(body io.Reader) (server *Server, err e
 	return
 }
 
-func (self *Manager) CreateServerFromArgs(port, method, password string, limit, timeout int64) (server *Server, err error) {
-	server, err = newServer(port, method, password, limit, timeout, self)
-	if err != nil {
-		return
-	}
-	fmt.Println("here")
-	err = self.addServerToManager(server)
-
-	if err != nil {
-		return
-	}
-	err = self.addServerToRedis(server)
-	return
-}
 
 //GET /api/servers
 func (self *Manager) All() (servers []*Server, err error)  {

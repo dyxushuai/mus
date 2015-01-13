@@ -13,6 +13,13 @@ import (
 	"fmt"
 )
 
+const (
+	bufSize = 4096
+	nBuf = 2048
+)
+
+var pipeBuf = ss.NewLeakyBuf(nBuf, bufSize)
+
 
 type conn interface {
 	net.Conn
@@ -74,7 +81,6 @@ func (self *client) setTimeOut() (err error) {
 func (self *remote) setTimeOut() (err error) {
 	return
 }
-
 
 /*
 *filter http request from client
@@ -190,10 +196,6 @@ func (self *client) getRemote() (rt *remote, err error) {
 	return
 }
 
-
-
-
-//to and from neet two goroutine
 func (self *local) run() (flow int, err error) {
 	closed := false
 
@@ -203,26 +205,19 @@ func (self *local) run() (flow int, err error) {
 		}
 	}()
 	res_size, err := self.remote.Write(self.remote.extra)
+	if err != nil {
+		Debug(err)
+		return
+	}
 	flow += res_size
 
-	go func() {
-		self.clientToRemote()
-	}()
+	go self.clientToRemote()
 	size, _ := self.remoteToClient()
+
 	flow += size
 	closed = true
-//	if self.remote.isHttp {
-//		go func() {
-//			self.clientToRemote()
-//		}()
-//		flow, _ = self.remoteToClient()
-//		closed = true
-//	} else {
-//		err = newError(self.format, "request a non-http method", "")
-//	}
 	return
 }
-
 
 /*
 *data form remote to client
@@ -235,20 +230,11 @@ func (self *local) remoteToClient() (total int, raw_header []byte) {
 	return
 }
 
-
-
 func (self *local) clientToRemote() (total int, raw_header []byte) {
 	total, raw_header =  pipeThenClose(self.client, self.remote)
 	return
 }
 
-
-const (
-	bufSize = 4096
-	nBuf = 2048
-)
-
-var pipeBuf = ss.NewLeakyBuf(nBuf, bufSize)
 
 //from source to  destination ->
 func pipeThenClose(src, dst conn) (total int, raw_header []byte) {

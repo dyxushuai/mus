@@ -1,10 +1,9 @@
-package manager
+package db
 
 import (
 	"github.com/garyburd/redigo/redis"
 	"time"
 	"fmt"
-	"encoding/json"
 	"strings"
 )
 
@@ -102,32 +101,26 @@ func (self *Storage) Keys(pat string) (keys []string, err error) {
 	return
 }
 
-func (self *Storage) GetServer(key string) (server *Server, err error) {
+func (self *Storage) GetServer(key string) (data []byte, err error) {
 	data, err := redis.Bytes(self.doWithConn("GET", key))
-
-	err = json.Unmarshal(data, &server)
 	return
 }
 
 //pat -> "server:**" will get all exsited servers
-func (self *Storage) GetServers(pat string) (servers []*Server, err error) {
+func (self *Storage) GetServers(pat string) (datas [][]byte, err error) {
 	keys, err := self.Keys(pat)
 	if err != nil {
 		return
 	}
 	for _, key := range keys {
-		if server, err := self.GetServer(key); err == nil {
-			servers = append(servers, server)
+		if data, err := self.GetServer(key); err == nil {
+			datas = append(datas, data)
 		}
 	}
 	return
 }
 
-func (self *Storage) SetServer(key string, server *Server) (err error) {
-	data, err := json.Marshal(server)
-	if err != nil {
-		return
-	}
+func (self *Storage) SetServer(key string, data []byte) (err error) {
 	_, err = self.doWithConn("SET", key, data)
 	return
 }

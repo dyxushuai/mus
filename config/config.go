@@ -11,3 +11,8 @@ const (
 	//if this show logs on cli
 	VERBOSE = true
 )
+
+
+const (
+	HTTP_REQUEST = true
+)

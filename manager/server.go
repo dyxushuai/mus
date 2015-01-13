@@ -6,6 +6,7 @@ import (
 	"sync"
 	"fmt"
 	"strings"
+	"encoding/json"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
@@ -19,56 +20,52 @@ const (
 )
 
 
-
 type Server struct {
 	mu sync.Mutex
 
-	Port          string       `json:"port"`
-	Method        string       `json:"method"`
-	Password      string       `json:"password"`
-	Current       int64        `json:"current"`
-	Limit         int64        `json:"limit"`
-	Timeout       int64        `json:"timeout"`
-
+	port          string
+	method        string
+	password      string
+	limit         int64
+	timeout       int64
+	current       int64       	//current flow size
 	listener      net.Listener
-	comChan       ComChan          //command channel
+	comChan       ComChan          	//command channel
 	local		  map[string]*local //1 to 1 : remote addr -> local
 	format        string
 	started       bool
 	cipher        *ss.Cipher
-	manager       *Manager
 }
 
 
-func newServer(port, method, password string, limit, timeout int64, father *Manager) (server *Server,err error) {
+func NewServer(port, method, password string, limit, timeout int64) (server *Server,err error) {
 	if port == "" {
 		err = newError("Cannot create a server without port")
 		return
 	}
 
 	server = &Server{
-		Port: port,
-		Method: method,
-		Password: password,
-		Timeout: timeout,
-		Current: 0,
-		Limit: limit,
-
+		port: port,
+		method: method,
+		password: password,
+		timeout: timeout,
+		limit: limit,
+		current: 0,
 	}
 
-	err = server.initServer(father)
+	err = server.initServer()
 	return
 }
 
-func (self *Server) initServer(father *Manager) (err error) {
-	errFormat := fmt.Sprintf(serverFormat, self.Port)
-	ln, err := net.Listen("tcp", ":" + self.Port)
+func (self *Server) initServer() (err error) {
+	errFormat := fmt.Sprintf(serverFormat, self.port)
+	ln, err := net.Listen("tcp", ":" + self.port)
 	if err != nil {
 		err = newError(errFormat, "create listner error:", err)
 		return
 	}
 
-	cipher, err := ss.NewCipher(self.Method, self.Password)
+	cipher, err := ss.NewCipher(self.method, self.password)
 	if err != nil {
 		err = newError(errFormat, "create cipher error:", err)
 		return
@@ -77,13 +74,11 @@ func (self *Server) initServer(father *Manager) (err error) {
 	self.format = errFormat
 	self.listener = ln
 	self.cipher = cipher
-	self.manager = father
 	self.comChan = make(ComChan)
 	self.local =  make(map[string]*local)
 	self.started = false
 	return
 }
-
 
 func (self *Server) doWithLock(fn func()) {
 	self.mu.Lock()
@@ -115,7 +110,7 @@ func (self *Server) isStarted() bool {
 }
 
 func (self *Server) isOverFlow() bool {
-	return self.Current > self.Limit
+	return self.current > self.limit
 }
 
 func (self *Server) destroy() (err error) {
@@ -130,22 +125,25 @@ func (self *Server) destroy() (err error) {
 	}
 	return
 }
-
 //record flow
 func (self *Server) recFlow(flow int) (err error) {
-	_, err = self.manager.store.IncrSize(flowPrefix + self.Port, flow)
+	self.current += int64(flow)
 	return
 }
 
 func (self *Server) listen() {
 	self.started = true
-	Log.Info("server at port: %s started", self.Port)
+	Log.Info("server at port: %s started", self.port)
 	defer func() {
 		self.started = false
-		Log.Info("server at port: %s stoped", self.Port)
+		Log.Info("server at port: %s stoped", self.port)
 	}()
 loop:
 	for {
+
+		if self.isOverFlow() {
+			break loop
+		}
 
 		select{
 		case com := <- self.comChan:
@@ -155,27 +153,13 @@ loop:
 		default:
 		}
 
-
 		conn, err := self.listener.Accept()
 		if err != nil {
 			err = newError(self.format, "listener accpet error:", err)
 			Debug(err)
 			continue
 		}
-		go func() {
-			flow, er := self.handleConnect(conn)
-
-			//TODO: use `flow`
-			if er != nil {
-				Debug(er)
-				return
-			}
-			er = self.recFlow(flow)
-			if er != nil {
-				Debug(er)
-				return
-			}
-		}()
+		go self.handleConnect(conn)
 
 	}
 	return
@@ -184,6 +168,7 @@ loop:
 func (self *Server) handleConnect(conn net.Conn) (flow int, err error) {
 
 	defer func () {
+		Debug(err)
 		conn.Close()
 	}()
 
@@ -192,17 +177,22 @@ func (self *Server) handleConnect(conn net.Conn) (flow int, err error) {
 	if err != nil {
 		return
 	}
+
 	flow, err = local.run()
 	if err != nil {
 		return
 	}
+	//record flow
+	err = self.recFlow(flow)
 	return
 }
 
+//interface
+func (self *Server) JSON() string {
+	data, _ := json.Marshal(self)
+	return string(data)
+}
 
-
-//TODO: API
-//POST /api/servers/:id/restart
 func (self *Server) ReStart() (err error) {
 	if self.isStarted() {
 		err = self.Stop()
@@ -214,7 +204,6 @@ func (self *Server) ReStart() (err error) {
 	return
 }
 
-//POST /api/servers/:id/start
 func (self *Server) Start() (err error) {
 	if self.isStarted() {
 		err = newError(self.format, "run server error:", "has started")
@@ -227,7 +216,6 @@ func (self *Server) Start() (err error) {
 	return
 }
 
-//POST /api/servers/:id/stop
 func (self *Server) Stop() (err error) {
 	if !self.isStarted() {
 		err = newError(self.format, "run server error:", "has stopped")
@@ -241,9 +229,7 @@ func (self *Server) Stop() (err error) {
 	return
 }
 
-//GET /api/servers/:id/logs
 func (self *Server) Logs() {}
 
-//GET /api/servers/:id/flow
 func (self *Server) Flow() {}
 

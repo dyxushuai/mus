@@ -1,5 +1,0 @@
-/*
-*message channel
-*/
-package manager
-

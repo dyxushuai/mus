@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"net/http"
-	"encoding/json"
 )
 
 type ServerAPI struct {
@@ -17,13 +16,15 @@ func (self *ServerAPI) Index(w http.ResponseWriter, r *http.Request) {
 func (self *ServerAPI) Create(w http.ResponseWriter, r *http.Request) {}
 
 //Get("/api/servers/:id", "get :id server")
-func (self *ServerAPI) Show(w http.ResponseWriter, r *http.Request) {
+func (self *ServerAPI) Show(w http.ResponseWriter, r *http.Request) (json string) {
 	params := r.URL.Query()
 	id := params.Get(":id")
-	server, _ := M.Show(id)
-	server.Start()
-	data, _ := json.Marshal(server)
-	w.Write(data)
+	server, err := M.Show(id)
+	if err != nil {
+
+	}
+	json = server.JSON()
+	return
 }
 
 //Del("/api/servers/:id", "delete :id server")
