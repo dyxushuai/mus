@@ -6,7 +6,6 @@ import (
 	"sync"
 	"encoding/json"
 	"io"
-	"fmt"
 )
 
 type Manager struct {
@@ -49,7 +48,7 @@ func (self *Manager) validServer(port string) (err error) {
 
 
 //operate servers from manager
-func (self *Manager) getServerFromManager(port string) (server *Server, err error) {
+func (self *Manager) GetServerFromManager(port string) (server *Server, err error) {
 	err = self.validServer(port)
 	if err != nil {
 		return
@@ -60,14 +59,14 @@ func (self *Manager) getServerFromManager(port string) (server *Server, err erro
 	return
 }
 
-func (self *Manager) getServersFromManager(ports ...string) (servers []*Server, err error) {
+func (self *Manager) GetServersFromManager(ports ...string) (servers []*Server, err error) {
 	if len(ports) == 0 {
 		err = newError("Need port but port is nil")
 		return
 	}
 
 	for _, port := range ports {
-		if server, er := self.getServerFromManager(port); er == nil {
+		if server, er := self.getServerFromManager(string(port)); er == nil {
 			servers = append(servers, server)
 			Debug(er)
 		}
@@ -75,7 +74,7 @@ func (self *Manager) getServersFromManager(ports ...string) (servers []*Server, 
 	return
 }
 
-func (self *Manager) getAllServersFromManager() (servers []*Server, err error) {
+func (self *Manager) GetAllServersFromManager() (servers []*Server, err error) {
 	if len(self.servers) == 0 {
 		err = newError("There is no proxy server in manager")
 		return
@@ -86,26 +85,26 @@ func (self *Manager) getAllServersFromManager() (servers []*Server, err error) {
 	return
 }
 
-func (self *Manager) addServerToManager(server *Server) (err error) {
-	if self.hasServer(server.Port) {
-		err = newError("Add proxy server to manager failed: proxy server has existed on port: %s", server.Port)
+func (self *Manager) AddServerToManager(server *Server) (err error) {
+	if self.hasServer(server.port) {
+		err = newError("Add proxy server to manager failed: proxy server has existed on port: %s", server.port)
 		return
 	}
 	self.doWithLock(func () {
-		self.servers[server.Port] = server
+		self.servers[server.port] = server
 	})
 
 	return
 }
 
-func (self *Manager) addServersToManager(servers []*Server) (err error) {
+func (self *Manager) AddServersToManager(servers []*Server) (err error) {
 	for _, server := range servers {
 		err = self.addServerToManager(server)
 	}
 	return
 }
 
-func (self *Manager) delServerFromManager(port string) (server *Server, err error) {
+func (self *Manager) DelServerFromManager(port string) (server *Server, err error) {
 	err = self.validServer(port)
 	if err != nil {
 		return
@@ -118,7 +117,7 @@ func (self *Manager) delServerFromManager(port string) (server *Server, err erro
 	return
 }
 
-func (self *Manager) delServersFromManager(ports ...string) (servers []*Server, err error) {
+func (self *Manager) DelServersFromManager(ports ...string) (servers []*Server, err error) {
 	if len(ports) == 0 {
 		err = newError("Need port but port is nil")
 		return
@@ -127,13 +126,13 @@ func (self *Manager) delServersFromManager(ports ...string) (servers []*Server, 
 	servers, er = self.getServersFromManager(ports...)
 	Debug(er)
 	for _, port := range ports {
-		_, er = self.delServerFromManager(port)
+		_, er = self.delServerFromManager(string(port))
 		Debug(er)
 	}
 	return
 }
 
-func (self *Manager) delAllServersFromManager() (servers []*Server, err error) {
+func (self *Manager) DelAllServersFromManager() (servers []*Server, err error) {
 
 
 	for port, _ := range self.servers {
@@ -155,7 +154,7 @@ func (self *Manager) CreateServerFromBody(body io.Reader) (server *Server, err e
 		err = newError(err.Error())
 		return
 	}
-	err = server.initServer(self)
+	err = server.initServer()
 	if err != nil {
 		return
 	}

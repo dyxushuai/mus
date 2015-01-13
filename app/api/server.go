@@ -1,8 +1,8 @@
 package api
 
 import (
-	"github.com/JohnSmithX/mus/manager"
 	"github.com/JohnSmithX/mus/db"
+	"errors"
 )
 
 const (
@@ -23,13 +23,11 @@ type Server struct {
 }
 
 
-func New() {
 
-}
-
+var store = db.NewStorage()
 
 //operate servers from redis
-func (self *Server) getServerFromRedis(port string) (server *Server, err error) {
+func  GetServerFromRedis(port string) (server *Server, err error) {
 	server, err =  self.store.GetServer(serverPrefix + port)
 	if err != nil {
 		return
@@ -46,11 +44,11 @@ func (self *Server) getServerFromRedis(port string) (server *Server, err error) 
 
 func (self *Server) getServersFromRedis(ports ...string) (servers []*Server, err error) {
 	if len(ports) == 0 {
-		err = newError("Need port but port is nil")
+		err = errors.New("Need port but port is nil")
 		return
 	}
 	for _, port := range ports {
-		if server, er := self.getServerFromRedis(port); er == nil {
+		if server, er := self.getServerFromRedis(string(port)); er == nil {
 			servers = append(servers, server)
 			Debug(er)
 		}
@@ -86,9 +84,9 @@ func (self *Server) delServerFromRedis(port string) (err error) {
 	return
 }
 
-func (self *Manager) delServersFromRedis(ports ...string) (err error) {
+func (self *Server) delServersFromRedis(ports ...string) (err error) {
 	if len(ports) == 0 {
-		err = newError("Need port but port is nil")
+		err = errors.New("Need port but port is nil")
 		return
 	}
 	for _, port := range ports {
