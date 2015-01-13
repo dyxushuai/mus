@@ -69,7 +69,7 @@ func (self *Manager) GetServersFromManager(ports ...string) (servers []*Server, 
 	for _, port := range ports {
 		if server, er := self.getServerFromManager(string(port)); er == nil {
 			servers = append(servers, server)
-			Debug(er)
+			utils.Debug(er)
 		}
 	}
 	return
@@ -125,10 +125,10 @@ func (self *Manager) DelServersFromManager(ports ...string) (servers []*Server, 
 	}
 	var er error
 	servers, er = self.getServersFromManager(ports...)
-	Debug(er)
+	utils.Debug(er)
 	for _, port := range ports {
 		_, er = self.delServerFromManager(string(port))
-		Debug(er)
+		utils.Debug(er)
 	}
 	return
 }
@@ -139,7 +139,7 @@ func (self *Manager) DelAllServersFromManager() (servers []*Server, err error) {
 	for port, _ := range self.servers {
 		server, er := self.delServerFromManager(port)
 		servers = append(servers, server)
-		Debug(er)
+		utils.Debug(er)
 	}
 	return
 }

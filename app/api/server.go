@@ -14,11 +14,12 @@ const (
 )
 
 type Server struct {
-	manager.Manager
+	manager.Server
 	Id 				string				`json:"id"`
 	Create			utils.JsonTime		`json:"create_at"`
 	Update			utils.JsonTime		`json:"update_at"`
 }
+
 
 
 //operate servers from redis
@@ -34,6 +35,8 @@ func GetServerFromRedis(store *db.Storage, port string) (server *Server, err err
 	} else {
 		server.current = size
 	}
+	server.recorder = store.IncrSize
+
 	err = server.initServer()
 	return
 }
@@ -52,7 +55,7 @@ func GetServersFromRedis(store *db.Storage, ports ...string) (servers []*Server,
 	return
 }
 
-func GetAllServersFromRedis(store *db.Storage, ) (servers []*Server, err error) {
+func GetAllServersFromRedis(store *db.Storage) (servers []*Server, err error) {
 	servers, err =  store.GetServers(serverPrefix + "**")
 	if err != nil {
 		return
@@ -63,25 +66,25 @@ func GetAllServersFromRedis(store *db.Storage, ) (servers []*Server, err error) 
 	return
 }
 
-func  AddServerToRedis(store *db.Storage, server *Server) (err error) {
+func AddServerToRedis(store *db.Storage, server *Server) (err error) {
 	data, err := json.Marshal(server)
 	err = store.SetServer(serverPrefix + server.Port, data)
 	return
 }
 
-func  addServersToRedis(store *db.Storage, servers []*Server) (err error) {
+func AddServersToRedis(store *db.Storage, servers []*Server) (err error) {
 	for _, server := range servers {
 		err = AddServerToRedis(store, server)
 	}
 	return
 }
 
-func  DelServerFromRedis(store *db.Storage, port string) (err error) {
+func DelServerFromRedis(store *db.Storage, port string) (err error) {
 	err =  store.DelServer(serverPrefix + port)
 	return
 }
 
-func  DelServersFromRedis(store *db.Storage, ports ...string) (err error) {
+func DelServersFromRedis(store *db.Storage, ports ...string) (err error) {
 	if len(ports) == 0 {
 		err = utils.NewError("Need port but port is nil")
 		return
@@ -93,7 +96,7 @@ func  DelServersFromRedis(store *db.Storage, ports ...string) (err error) {
 	return
 }
 
-func  delAllServersFromRedis(store *db.Storage, ) (err error) {
+func DelAllServersFromRedis(store *db.Storage, ) (err error) {
 	keys, err := store.Keys(serverPrefix + "**")
 	if err != nil {
 		return

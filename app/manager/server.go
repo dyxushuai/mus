@@ -7,11 +7,16 @@ import (
 	"fmt"
 	"strings"
 	"encoding/json"
+	"github.com/JohnSmithX/mus/app/utils"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
 
 type ComChan chan int
+
+type Recorder interface {
+	IncrSize(string, int) (int64, error)
+}
 
 //command for loop
 const (
@@ -31,6 +36,7 @@ type Server struct {
 	Current       	int64       	`json:"current"`
 	Started			bool			`json:"started"`// the state of server
 	
+	recorder		Recorder
 	listener      	net.Listener
 	comChan       	ComChan          	//command channel
 	local		  	map[string]*local //1 to 1 : remote addr -> local
@@ -39,7 +45,7 @@ type Server struct {
 }
 
 
-func NewServer(port, method, password string, limit, timeout int64) (server *Server,err error) {
+func NewServer(port, method, password string, limit, timeout int64 ,recorder Recorder) (server *Server,err error) {
 	if port == "" {
 		err = newError("Cannot create a server without port")
 		return
@@ -52,6 +58,7 @@ func NewServer(port, method, password string, limit, timeout int64) (server *Ser
 		Timeout: timeout,
 		Limit: limit,
 		Current: 0,
+		recorder: recorder,
 	}
 
 	err = server.initServer()
@@ -128,7 +135,9 @@ func (self *Server) destroy() (err error) {
 }
 
 func (self *Server) addFlow(flow int) (err error) {
+	_, err = self.recorder.IncrSize("flow:" + self.Port, flow)
 	self.current += int64(flow)
+	utils.Debug(err)
 	return
 }
 
@@ -157,7 +166,7 @@ loop:
 		conn, err := self.listener.Accept()
 		if err != nil {
 			err = newError(self.format, "listener accpet error:", err)
-			Debug(err)
+			utils.Debug(err)
 			continue
 		}
 		go self.handleConnect(conn)
@@ -169,7 +178,7 @@ loop:
 func (self *Server) handleConnect(conn net.Conn) (flow int, err error) {
 
 	defer func () {
-		Debug(err)
+		utils.Debug(err)
 		conn.Close()
 	}()
 

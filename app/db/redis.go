@@ -46,6 +46,8 @@ func NewStorage(server, password string) (s *Storage) {
 	return
 }
 
+
+
 func (self * Storage) Test() (err error) {
 	_, err = self.doWithConn("PING")
 	return
@@ -58,6 +60,7 @@ func addPrefix(key string) string {
 	return PREFIX + key
 }
 
+
 func (self *Storage) doWithConn(keyName string, arg... interface {}) (reply interface{}, err error) {
 	conn := self.pool.Get()
 	defer conn.Close()
@@ -66,9 +69,6 @@ func (self *Storage) doWithConn(keyName string, arg... interface {}) (reply inte
 		arg[0] = key
 	}
 	reply, err = conn.Do(keyName, arg...)
-	if err != nil {
-		err = newError(err.Error())
-	}
 	return
 }
 
