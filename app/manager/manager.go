@@ -9,14 +9,25 @@ import (
 	"github.com/JohnSmithX/mus/app/utils"
 )
 
+
+//TODO:interface
+type Server interface {
+
+}
+
+
+
+
+var Log utils.Verbose
+var newError = utils.NewError
+
 type Manager struct {
 	mu sync.Mutex
 	verbose bool
 	servers map[string]*Server //port -> ss server
 }
 
-var Log utils.Verbose
-var newError = utils.NewError
+
 
 func NewManager(verbose bool) (manager *Manager) {
 

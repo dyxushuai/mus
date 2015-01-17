@@ -1,5 +1,5 @@
 //a client connect
-package manager
+package shadowsocks
 
 import (
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
@@ -16,6 +16,11 @@ import (
 const (
 	bufSize = 4096
 	nBuf = 2048
+)
+
+//local config
+const (
+	localFormat string = "local: %s : %%s %%v"
 )
 
 var pipeBuf = ss.NewLeakyBuf(nBuf, bufSize)

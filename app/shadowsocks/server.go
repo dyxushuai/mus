@@ -1,5 +1,5 @@
 //this is a shadowsocks server
-package manager
+package shadowsocks
 
 import (
 	"net"
@@ -10,6 +10,17 @@ import (
 	"github.com/JohnSmithX/mus/app/utils"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
+
+
+//server config
+const (
+	//format output
+	serverFormat string = "proxy server at port %s : %%s %%v"
+)
+
+
+var Log utils.Verbose
+var newError = utils.NewError
 
 
 type ComChan chan int
