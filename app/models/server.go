@@ -7,21 +7,23 @@ import (
 	"encoding/json"
 	uuid "github.com/satori/go.uuid"
 	"time"
+	"strings"
+//	"fmt"
 
 )
 
 //for redis key string
 const (
-	serverPrefix = "server:"
-	flowPrefix = "flow:"
+	serverPrefix = "mus:server:"
+	flowPrefix = "mus:flow:"
 )
 
 type Server struct {
-	ss.Server
-	store 			db.IStorage
-	Id 				string				`json:"id"`
-	Create			utils.JsonTime		`json:"create_at"`
-	Update			utils.JsonTime		`json:"update_at"`
+	*ss.Server
+	store 				db.IStorage
+	Id 					string				`json:"id"`
+	CreateTime			utils.Time		`json:"create_at"`
+	UpdateTime			utils.Time		`json:"update_at"`
 }
 
 func New(port, method, password string, limit, timeout int64 ,recorder db.IStorage) (server *Server,err error) {
@@ -36,31 +38,36 @@ func New(port, method, password string, limit, timeout int64 ,recorder db.IStora
 		return
 	}
 
-	server.store = recorder
 
-	server.initialize()
 
-	err = server.InitServer()
-	
+	server.initialize(recorder)
+
 	err = server.save()
 	return
 }
 
+func addPrefix(key, prefix string) string {
+	if strings.HasPrefix(key, prefix) {
+		return key
+	}
+	return prefix + key
+}
 //json ID
-func (self *Server) initialize() {
-	self.Id = uuid.NewV4()
+func (self *Server) initialize(recorder db.IStorage) {
+	self.Id = uuid.NewV4().String()
+	self.store = recorder
 	self.upTime()
 	self.crTime()
 }
 
 //update time at Now
 func (self *Server) upTime() {
-	self.Update.Time = time.Now()
+	self.UpdateTime = utils.Time(time.Now())
 }
 
 //create time at Now
 func (self *Server) crTime() {
-	self.Create.Time = time.Now()
+	self.CreateTime = utils.Time(time.Now())
 }
 
 
@@ -81,14 +88,26 @@ func (self *Server) Delete() (err error) {
 	return
 }
 
-
-//operate servers from redis
-func GetServerFromRedis(store db.IStorage, port string) (server *Server, err error) {
-	data, err :=  store.GetServer(serverPrefix + port)
-
+func (self *Server) JSON() (result string, err error) {
+	data, err := json.Marshal(self)
 	if err != nil {
 		return
 	}
+	result = string(data)
+	return
+}
+
+
+//operate servers from redis
+func GetServerFromRedis(store db.IStorage, port string) (server *Server, err error) {
+	data, err :=  store.GetServer(addPrefix(port, serverPrefix))
+
+	if err != nil {
+
+		return
+	}
+
+	server = &Server{}
 	err = json.Unmarshal(data, server)
 	if err != nil {
 		return
@@ -100,9 +119,13 @@ func GetServerFromRedis(store db.IStorage, port string) (server *Server, err err
 	} else {
 		server.Current = size
 	}
-	server.recorder = store
 
+
+	server.initialize(store)
+
+	server.SetRecorder(store)
 	err = server.InitServer()
+
 	return
 }
 
@@ -114,24 +137,33 @@ func GetServersFromRedis(store db.IStorage, ports ...string) (servers []*Server,
 	for _, port := range ports {
 		if server, er := GetServerFromRedis(store, string(port)); er == nil {
 			servers = append(servers, server)
-			utils.Debug(er)
+		} else {
+			err = er
+			return
 		}
 	}
 	return
 }
 
 func GetAllServersFromRedis(store db.IStorage) (servers []*Server, err error) {
-	servers, err =  store.GetServers(serverPrefix + "**")
+	keys, err := store.Keys(serverPrefix + "**")
 	if err != nil {
 		return
 	}
-	for _, server := range servers {
-		err = server.InitServer()
+	for _, key := range keys {
+
+		if server, er := GetServerFromRedis(store, key); er == nil {
+			servers = append(servers, server)
+		} else {
+			err = er
+			return
+		}
 	}
 	return
 }
 
 func AddServerToRedis(store db.IStorage, server *Server) (err error) {
+
 	data, err := json.Marshal(server)
 	err = store.SetServer(serverPrefix + server.Port, data)
 	return
@@ -140,6 +172,9 @@ func AddServerToRedis(store db.IStorage, server *Server) (err error) {
 func AddServersToRedis(store db.IStorage, servers []*Server) (err error) {
 	for _, server := range servers {
 		err = AddServerToRedis(store, server)
+		if err != nil {
+			return
+		}
 	}
 	return
 }
@@ -155,8 +190,10 @@ func DelServersFromRedis(store db.IStorage, ports ...string) (err error) {
 		return
 	}
 	for _, port := range ports {
-		er := DelServerFromRedis(store, string(port))
-		utils.Debug(er)
+		err = DelServerFromRedis(store, string(port))
+		if err != nil {
+			return
+		}
 	}
 	return
 }
@@ -167,8 +204,10 @@ func DelAllServersFromRedis(store db.IStorage, ) (err error) {
 		return
 	}
 	for _, key := range keys {
-		er := store.DelServer(key)
-		utils.Debug(er)
+		err = store.DelServer(key)
+		if err != nil {
+			return
+		}
 	}
 	return
 }

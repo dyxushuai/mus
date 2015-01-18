@@ -212,7 +212,7 @@ func (self *local) run() (flow int, err error) {
 	}()
 	res_size, err := self.remote.Write(self.remote.extra)
 	if err != nil {
-		Debug(err)
+		utils.Debug(err)
 		return
 	}
 	flow += res_size
@@ -268,7 +268,7 @@ func pipeThenClose(src, dst conn) (total int, raw_header []byte) {
 			}
 			size, err = dst.Write(buf[0:n])
 			if err != nil {
-				ss.Debug.Println("write:", err)
+				utils.Debug(err)
 				break
 			}
 			total += size

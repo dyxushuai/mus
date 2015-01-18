@@ -2,19 +2,40 @@ package utils
 
 import "time"
 
-type JsonTime struct {
-	time.Time
+const Format = "2006-01-02T15:04:05"
+const jsonFormat = `"` + Format + `"`
+
+var fixedZone = time.FixedZone("", 0)
+
+type Time time.Time
+
+
+func New(t time.Time) Time {
+	return Time(time.Date(
+		t.Year(),
+		t.Month(),
+		t.Day(),
+		t.Hour(),
+		t.Minute(),
+		t.Second(),
+		0,
+		fixedZone,
+	))
 }
 
-func (j JsonTime) format() string {
-	return j.Time.Unix()
+func (it Time) MarshalJSON() ([]byte, error) {
+	return []byte(time.Time(it).Format(jsonFormat)), nil
 }
 
-func (j JsonTime) MarshalText() ([]byte, error) {
-	return []byte(j.format()), nil
+func (it *Time) UnmarshalJSON(data []byte) error {
+	t, err := time.ParseInLocation(jsonFormat, string(data), fixedZone)
+	if err == nil {
+		*it = Time(t)
+	}
+
+	return err
 }
 
-func (j JsonTime) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + j.format() + `"`), nil
+func (it Time) String() string {
+	return time.Time(it).String()
 }
-

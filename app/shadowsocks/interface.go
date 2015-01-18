@@ -1,9 +1,14 @@
 package  shadowsocks
 
+import (
+	"github.com/JohnSmithX/mus/app/db"
+)
+
 type ShadowsocksServer interface {
 	//initialize function
 	InitServer() error
 
+	SetRecorder(db.IStorage)
 	//json text
 	JSON() (string, error)
 
@@ -18,4 +23,6 @@ type ShadowsocksServer interface {
 	Stop() error
 
 	Destroy() error
+
+	Key() string
 }

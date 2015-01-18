@@ -6,7 +6,6 @@ import (
 	"sync"
 	"fmt"
 	"strings"
-	"encoding/json"
 	"github.com/JohnSmithX/mus/app/utils"
 	"github.com/JohnSmithX/mus/app/db"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
@@ -107,9 +106,12 @@ func (self *Server) isOverFlow() bool {
 
 
 func (self *Server) addFlow(flow int) (err error) {
-	_, err = self.recorder.IncrSize("flow:" + self.Port, flow)
-	self.current += int64(flow)
-	utils.Debug(err)
+
+	self.doWithLock(func() {
+		_, err = self.recorder.IncrSize("flow:" + self.Port, flow)
+		self.Current += int64(flow)
+		utils.Debug(err)
+	})
 	return
 }
 
@@ -171,7 +173,6 @@ func (self *Server) handleConnect(conn net.Conn) (flow int, err error) {
 
 
 //interface
-
 func (self *Server) InitServer() (err error) {
 
 	self.comChan = make(ComChan)
@@ -199,14 +200,12 @@ func (self *Server) InitServer() (err error) {
 	return
 }
 
-func (self *Server) JSON() (result string, err error) {
-	data, err := json.Marshal(self)
-	if err != nil {
-		return
-	}
-	result = string(data)
-	return
+func (self *Server) SetRecorder(recorder db.IStorage) {
+
+	self.recorder = recorder
 }
+
+
 
 func (self *Server) ReStart() (err error) {
 	if self.isStarted() {
@@ -261,3 +260,6 @@ func (self *Server) Logs() (result string, err error) {return}
 
 func (self *Server) Flow() (result string, err error) {return}
 
+func (self *Server) Key() string {
+	return self.Port
+}

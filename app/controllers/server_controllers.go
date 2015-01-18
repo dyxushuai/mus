@@ -2,11 +2,12 @@ package controllers
 
 import (
 	"net/http"
-
+	"github.com/JohnSmithX/mus/app/manager"
+	"github.com/JohnSmithX/mus/app/utils"
 )
 
 type ServerAPI struct {
-
+	SM *manager.Manager
 }
 
 
@@ -29,11 +30,11 @@ func (self *ServerAPI) Show(w http.ResponseWriter, r *http.Request) (json string
 	id := params.Get(":id")
 
 
-	server, err := M.Show(id)
+	server, err := self.SM.Show(id)
 	if err != nil {
-
+		utils.Debug(err)
 	}
-	json = server.JSON()
+	json, _ = server.JSON()
 	return
 }
 

@@ -4,7 +4,6 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"time"
 	"fmt"
-	"strings"
 )
 
 const (
@@ -52,22 +51,12 @@ func (self * Storage) Test() (err error) {
 	_, err = self.doWithConn("PING")
 	return
 }
-//add PREFIX to key
-func addPrefix(key string) string {
-	if strings.HasPrefix(key, PREFIX) {
-		return key
-	}
-	return PREFIX + key
-}
+
 
 
 func (self *Storage) doWithConn(keyName string, arg... interface {}) (reply interface{}, err error) {
 	conn := self.pool.Get()
 	defer conn.Close()
-	if key, ok := arg[0].(string); ok {
-		key = addPrefix(key)
-		arg[0] = key
-	}
 	reply, err = conn.Do(keyName, arg...)
 	return
 }
@@ -102,7 +91,7 @@ func (self *Storage) Keys(pat string) (keys []string, err error) {
 }
 
 func (self *Storage) GetServer(key string) (data []byte, err error) {
-	data, err := redis.Bytes(self.doWithConn("GET", key))
+	data, err = redis.Bytes(self.doWithConn("GET", key))
 	return
 }
 

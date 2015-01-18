@@ -2,18 +2,21 @@ package utils
 
 import (
 	goLog "github.com/segmentio/go-log"
+	"os"
 )
 
 
+var log = goLog.New(os.Stderr, goLog.DEBUG, "")
+
 func Debug(err error) {
 	if err != nil {
-		goLog.Debug(err.Error())
+		log.Debug(err.Error())
 	}
 }
 
 func Info(msg string, args ...interface {}) {
-	if msg != nil {
-		goLog.Info(msg, args...)
+	if msg != "" {
+		log.Info(msg, args...)
 	}
 }
 

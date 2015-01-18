@@ -19,6 +19,7 @@ type IServer interface {
 
 	Destroy() error
 
+	Key() string
 	//db
 	Update() error
 	Delete() error
