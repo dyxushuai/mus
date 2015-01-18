@@ -5,7 +5,7 @@ type IServer interface {
 	InitServer() error
 
 	//json text
-	JSON() (string, error)
+	JSON() ([]byte, error)
 
 	Logs() (string, error)
 

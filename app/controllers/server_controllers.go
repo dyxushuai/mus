@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"github.com/JohnSmithX/mus/app/manager"
 	"github.com/JohnSmithX/mus/app/utils"
+	j "encoding/json"
 )
 
 type ServerAPI struct {
@@ -15,6 +16,11 @@ type ServerAPI struct {
 
 //Get("/api/servers", "get all")
 func (self *ServerAPI) Index(w http.ResponseWriter, r *http.Request) (json string) {
+	servers, _ := self.SM.All()
+
+	data, _ := j.Marshal(servers)
+	json = string(data)
+
 	return
 
 }
@@ -34,7 +40,9 @@ func (self *ServerAPI) Show(w http.ResponseWriter, r *http.Request) (json string
 	if err != nil {
 		utils.Debug(err)
 	}
-	json, _ = server.JSON()
+	str, _ := server.JSON()
+
+	json = string(str)
 	return
 }
 

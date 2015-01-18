@@ -88,12 +88,12 @@ func (self *Server) Delete() (err error) {
 	return
 }
 
-func (self *Server) JSON() (result string, err error) {
+func (self *Server) JSON() (result []byte, err error) {
 	data, err := json.Marshal(self)
 	if err != nil {
 		return
 	}
-	result = string(data)
+	result = data
 	return
 }
 

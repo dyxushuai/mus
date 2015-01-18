@@ -16,7 +16,7 @@ func Serve(redisHost, redisPWD string) {
 	server.Use(methodoverride.New())
 
 	api := controllers.New(redisHost, redisPWD)
-	//	server.Get("/api/servers", "get all")
+	server.Get("/api/servers", utils.JsonView(api.NewServerAPI().Index))
 	//	server.Post("/api/servers", "create new")
 
 	server.Get("/api/servers/:id", utils.JsonView(api.NewServerAPI().Show))
