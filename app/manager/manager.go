@@ -7,33 +7,22 @@ import (
 	"encoding/json"
 	"io"
 	"github.com/JohnSmithX/mus/app/utils"
+	"github.com/JohnSmithX/mus/app/models"
 )
 
 
-//TODO:interface
-type Server interface {
-
-}
-
-
-
-
-var Log utils.Verbose
-var newError = utils.NewError
 
 type Manager struct {
 	mu sync.Mutex
-	verbose bool
-	servers map[string]*Server //port -> ss server
+	servers map[string]models.IServer //port -> ss server
 }
 
 
 
-func NewManager(verbose bool) (manager *Manager) {
+func NewManager() (manager *Manager) {
 
-	Log = Verbose(verbose)
 	manager = &Manager{}
-	manager.servers = make(map[string]*Server)
+	manager.servers = make(map[string]models.IServer)
 	return
 }
 
@@ -53,14 +42,14 @@ func (self *Manager) hasServer(port string) bool {
 
 func (self *Manager) validServer(port string) (err error) {
 	if !self.hasServer(port) {
-		err = newError("There is no proxy server listened on the port: %s", port)
+		err = utils.NewError("There is no proxy server listened on the port: %s", port)
 	}
 	return
 }
 
 
 //operate servers from manager
-func (self *Manager) GetServerFromManager(port string) (server *Server, err error) {
+func (self *Manager) getServerFromManager(port string) (server models.IServer, err error) {
 	err = self.validServer(port)
 	if err != nil {
 		return
@@ -71,9 +60,9 @@ func (self *Manager) GetServerFromManager(port string) (server *Server, err erro
 	return
 }
 
-func (self *Manager) GetServersFromManager(ports ...string) (servers []*Server, err error) {
+func (self *Manager) getServersFromManager(ports ...string) (servers []models.IServer, err error) {
 	if len(ports) == 0 {
-		err = newError("Need port but port is nil")
+		err = utils.NewError("Need port but port is nil")
 		return
 	}
 
@@ -86,9 +75,9 @@ func (self *Manager) GetServersFromManager(ports ...string) (servers []*Server, 
 	return
 }
 
-func (self *Manager) GetAllServersFromManager() (servers []*Server, err error) {
+func (self *Manager) getAllServersFromManager() (servers []models.IServer, err error) {
 	if len(self.servers) == 0 {
-		err = newError("There is no proxy server in manager")
+		err = utils.NewError("There is no proxy server in manager")
 		return
 	}
 	for _, server := range self.servers {
@@ -97,9 +86,9 @@ func (self *Manager) GetAllServersFromManager() (servers []*Server, err error) {
 	return
 }
 
-func (self *Manager) AddServerToManager(server *Server) (err error) {
+func (self *Manager) addServerToManager(server models.IServer) (err error) {
 	if self.hasServer(server.port) {
-		err = newError("Add proxy server to manager failed: proxy server has existed on port: %s", server.port)
+		err = utils.NewError("Add proxy server to manager failed: proxy server has existed on port: %s", server.port)
 		return
 	}
 	self.doWithLock(func () {
@@ -109,14 +98,14 @@ func (self *Manager) AddServerToManager(server *Server) (err error) {
 	return
 }
 
-func (self *Manager) AddServersToManager(servers []*Server) (err error) {
+func (self *Manager) addServersToManager(servers []models.IServer) (err error) {
 	for _, server := range servers {
 		err = self.addServerToManager(server)
 	}
 	return
 }
 
-func (self *Manager) DelServerFromManager(port string) (server *Server, err error) {
+func (self *Manager) delServerFromManager(port string) (server models.IServer, err error) {
 	err = self.validServer(port)
 	if err != nil {
 		return
@@ -129,9 +118,9 @@ func (self *Manager) DelServerFromManager(port string) (server *Server, err erro
 	return
 }
 
-func (self *Manager) DelServersFromManager(ports ...string) (servers []*Server, err error) {
+func (self *Manager) delServersFromManager(ports ...string) (servers []models.IServer, err error) {
 	if len(ports) == 0 {
-		err = newError("Need port but port is nil")
+		err = utils.NewError("Need port but port is nil")
 		return
 	}
 	var er error
@@ -144,7 +133,7 @@ func (self *Manager) DelServersFromManager(ports ...string) (servers []*Server, 
 	return
 }
 
-func (self *Manager) DelAllServersFromManager() (servers []*Server, err error) {
+func (self *Manager) delAllServersFromManager() (servers []models.IServer, err error) {
 
 
 	for port, _ := range self.servers {
@@ -159,11 +148,11 @@ func (self *Manager) DelAllServersFromManager() (servers []*Server, err error) {
 //TODO: API
 //request with json content
 //POST /api/servers
-func (self *Manager) CreateServerFromBody(body io.Reader) (server *Server, err error) {
+func (self *Manager) CreateServerFromBody(body io.Reader) (server models.IServer, err error) {
 	decoder := json.NewDecoder(body)
 	err = decoder.Decode(server)
 	if err != nil {
-		err = newError(err.Error())
+		err = utils.NewError(err.Error())
 		return
 	}
 	err = server.initServer()
@@ -180,25 +169,25 @@ func (self *Manager) CreateServerFromBody(body io.Reader) (server *Server, err e
 
 
 //GET /api/servers
-func (self *Manager) All() (servers []*Server, err error)  {
+func (self *Manager) All() (servers []models.IServer, err error)  {
 	servers, err = self.getAllServersFromManager()
 	return
 }
 
 //GET /api/servers/:id select
-func (self *Manager) Show(id string) (server *Server, err error) {
+func (self *Manager) Show(id string) (server models.IServer, err error) {
 	server, err = self.getServerFromManager(id)
 	return
 }
 
 //DEL /api/servers/:id delete
-func (self *Manager) Delete(id string) (server *Server, err error) {
+func (self *Manager) Delete(id string) (server models.IServer, err error) {
 	server, err = self.delServerFromManager(id)
 	return
 }
 
 //PUT /api/servers/:id update
-func (self *Manager) Update(id string, body io.Reader) (server *Server, err error) {
+func (self *Manager) Update(id string, body io.Reader) (server models.IServer, err error) {
 	server, err = self.Delete(id)
 	if err != nil {
 		return

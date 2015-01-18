@@ -3,6 +3,7 @@ package shadowsocks
 
 import (
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
+	"github.com/JohnSmithX/mus/app/utils"
 	"net"
 	"io"
 	"encoding/binary"
@@ -77,7 +78,7 @@ func (self *client) setTimeOut() (err error) {
 		readTimeout := time.Duration(self.father.father.Timeout) * time.Second
 		err = self.SetReadDeadline(time.Now().Add(readTimeout))
 		if err != nil {
-			err = newError(self.father.format, "client set timeout error:", err)
+			err = utils.NewError(self.father.format, "client set timeout error:", err)
 		}
 	}
 	return
@@ -97,7 +98,7 @@ func (self *remote) checkMethod() (err error) {
 
 	//
 	if self.extra == nil {
-		err = newError("No request content form client")
+		err = utils.NewError("No request content form client")
 		return
 	}
 
@@ -142,7 +143,7 @@ func (self *client) getRemote() (rt *remote, err error) {
 
 
 	if err != nil {
-		err = newError(self.father.format, "read domain form client error:", err)
+		err = utils.NewError(self.father.format, "read domain form client error:", err)
 		return
 	}
 
@@ -155,13 +156,13 @@ func (self *client) getRemote() (rt *remote, err error) {
 	case typeDm:
 		reqLen = int(buf[idDmLen]) + lenDmBase
 	default:
-		err = newError(self.father.format, "type of request address is not supported", string(buf[idType]))
+		err = utils.NewError(self.father.format, "type of request address is not supported", string(buf[idType]))
 		return
 	}
 	if n < reqLen { // rare case
 		self.setTimeOut()
 		if _, err = io.ReadFull(self, buf[n:reqLen]); err != nil {
-			err = newError(self.father.format, "read addr form client error:", err)
+			err = utils.NewError(self.father.format, "read addr form client error:", err)
 			return
 		}
 	} else if n > reqLen {
@@ -189,9 +190,9 @@ func (self *client) getRemote() (rt *remote, err error) {
 		if ne, ok := err.(*net.OpError); ok && (ne.Err == syscall.EMFILE || ne.Err == syscall.ENFILE) {
 			// log too many open file error
 			// EMFILE is process reaches open file limits, ENFILE is system limit
-			err = newError(self.father.format, "dial error:", err)
+			err = utils.NewError(self.father.format, "dial error:", err)
 		} else {
-			err = newError(self.father.format, "error connecting to: " + host, err)
+			err = utils.NewError(self.father.format, "error connecting to: " + host, err)
 		}
 		return
 	}

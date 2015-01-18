@@ -8,6 +8,7 @@ import (
 	"strings"
 	"encoding/json"
 	"github.com/JohnSmithX/mus/app/utils"
+	"github.com/JohnSmithX/mus/app/db"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
@@ -16,24 +17,20 @@ import (
 const (
 	//format output
 	serverFormat string = "proxy server at port %s : %%s %%v"
-)
-
-
-var Log utils.Verbose
-var newError = utils.NewError
-
-
-type ComChan chan int
-
-type Recorder interface {
-	IncrSize(string, int) (int64, error)
-}
-
-//command for loop
-const (
+	//command for loop
 	NULL int = iota
 	STOP
+
 )
+
+
+type (
+	ComChan chan int
+)
+
+
+
+
 
 
 type Server struct {
@@ -47,7 +44,7 @@ type Server struct {
 	Current       	int64       	`json:"current"`
 	Started			bool			`json:"started"`// the state of server
 	
-	recorder		Recorder
+	recorder		db.IStorage
 	listener      	net.Listener
 	comChan       	ComChan          	//command channel
 	local		  	map[string]*local //1 to 1 : remote addr -> local
@@ -55,10 +52,9 @@ type Server struct {
 	cipher        	*ss.Cipher
 }
 
-
-func NewServer(port, method, password string, limit, timeout int64 ,recorder Recorder) (server *Server,err error) {
+func NewServer(port, method, password string, limit, timeout int64 ,recorder db.IStorage) (server *Server,err error) {
 	if port == "" {
-		err = newError("Cannot create a server without port")
+		err = utils.NewError("Cannot create a server without port")
 		return
 	}
 
@@ -72,30 +68,7 @@ func NewServer(port, method, password string, limit, timeout int64 ,recorder Rec
 		recorder: recorder,
 	}
 
-	err = server.initServer()
-	return
-}
-
-func (self *Server) initServer() (err error) {
-	errFormat := fmt.Sprintf(serverFormat, self.Port)
-	ln, err := net.Listen("tcp", ":" + self.Port)
-	if err != nil {
-		err = newError(errFormat, "create listner error:", err)
-		return
-	}
-
-	cipher, err := ss.NewCipher(self.Method, self.Password)
-	if err != nil {
-		err = newError(errFormat, "create cipher error:", err)
-		return
-	}
-
-	self.format = errFormat
-	self.listener = ln
-	self.cipher = cipher
-	self.comChan = make(ComChan)
-	self.local =  make(map[string]*local)
-	self.Started = false
+	err = server.InitServer()
 	return
 }
 
@@ -112,7 +85,7 @@ func (self *Server) addLocal(conn net.Conn) (local *local, err error) {
 
 	local, err = newLocal(self, ssconn)
 	if err != nil {
-		err = newError(self.format, "create local error:", err)
+		err = utils.NewError(self.format, "create local error:", err)
 		return
 	}
 
@@ -132,18 +105,6 @@ func (self *Server) isOverFlow() bool {
 	return self.Current > self.Limit
 }
 
-func (self *Server) destroy() (err error) {
-	//first stop the loop
-	//second close the chan
-	//third close the listener
-
-	self.Stop()
-	close(self.comChan)
-	if err := self.listener.Close(); err != nil {
-		err = newError(self.format, "close with error:", err)
-	}
-	return
-}
 
 func (self *Server) addFlow(flow int) (err error) {
 	_, err = self.recorder.IncrSize("flow:" + self.Port, flow)
@@ -154,10 +115,10 @@ func (self *Server) addFlow(flow int) (err error) {
 
 func (self *Server) listen() {
 	self.Started = true
-	Log.Info("server at port: %s started", self.Port)
+	utils.Info("server at port: %s started", self.Port)
 	defer func() {
 		self.Started = false
-		Log.Info("server at port: %s stoped", self.Port)
+		utils.Info("server at port: %s stoped", self.Port)
 	}()
 loop:
 	for {
@@ -176,7 +137,7 @@ loop:
 
 		conn, err := self.listener.Accept()
 		if err != nil {
-			err = newError(self.format, "listener accpet error:", err)
+			err = utils.NewError(self.format, "listener accpet error:", err)
 			utils.Debug(err)
 			continue
 		}
@@ -208,10 +169,43 @@ func (self *Server) handleConnect(conn net.Conn) (flow int, err error) {
 	return
 }
 
+
 //interface
-func (self *Server) JSON() string {
-	data, _ := json.Marshal(self)
-	return string(data)
+
+func (self *Server) InitServer() (err error) {
+
+	self.comChan = make(ComChan)
+	self.local =  make(map[string]*local)
+	self.Started = false
+
+	errFormat := fmt.Sprintf(serverFormat, self.Port)
+
+	ln, err := net.Listen("tcp", ":" + self.Port)
+	if err != nil {
+		err = utils.NewError(errFormat, "create listner error:", err)
+		return
+	}
+
+	cipher, err := ss.NewCipher(self.Method, self.Password)
+	if err != nil {
+		err = utils.NewError(errFormat, "create cipher error:", err)
+		return
+	}
+
+	self.format = errFormat
+	self.listener = ln
+	self.cipher = cipher
+
+	return
+}
+
+func (self *Server) JSON() (result string, err error) {
+	data, err := json.Marshal(self)
+	if err != nil {
+		return
+	}
+	result = string(data)
+	return
 }
 
 func (self *Server) ReStart() (err error) {
@@ -227,7 +221,7 @@ func (self *Server) ReStart() (err error) {
 
 func (self *Server) Start() (err error) {
 	if self.isStarted() {
-		err = newError(self.format, "run server error:", "has started")
+		err = utils.NewError(self.format, "run server error:", "has started")
 		return
 	}
 
@@ -239,7 +233,7 @@ func (self *Server) Start() (err error) {
 
 func (self *Server) Stop() (err error) {
 	if !self.isStarted() {
-		err = newError(self.format, "run server error:", "has stopped")
+		err = utils.NewError(self.format, "run server error:", "has stopped")
 		return
 	}
 	go func() {
@@ -250,7 +244,20 @@ func (self *Server) Stop() (err error) {
 	return
 }
 
-func (self *Server) Logs() {}
+func (self *Server) Destroy() (err error) {
+	//first stop the loop
+	//second close the chan
+	//third close the listener
 
-func (self *Server) Flow() {}
+	self.Stop()
+	close(self.comChan)
+	if err := self.listener.Close(); err != nil {
+		err = utils.NewError(self.format, "close with error:", err)
+	}
+	return
+}
+
+func (self *Server) Logs() (result string, err error) {return}
+
+func (self *Server) Flow() (result string, err error) {return}
 
