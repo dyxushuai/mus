@@ -1,8 +1,13 @@
 package models
 
+import (
+	"github.com/JohnSmithX/mus/app/db"
+)
+
 type IServer interface {
-	//initialize function
-	InitServer() error
+
+
+	InitServer(db.IStorage) error
 
 	//json text
 	JSON() ([]byte, error)

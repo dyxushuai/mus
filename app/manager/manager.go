@@ -185,6 +185,12 @@ func (self *Manager) All() (servers []models.IServer, err error)  {
 	return
 }
 
+//POST /api/servers
+func (self *Manager) Create(server models.IServer) (err error)  {
+	err = self.AddServerToManager(server)
+	return
+}
+
 //GET /api/servers/:id select
 func (self *Manager) Show(id string) (server models.IServer, err error) {
 	server, err = self.GetServerFromManager(id)

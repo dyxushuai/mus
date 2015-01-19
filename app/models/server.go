@@ -8,7 +8,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"time"
 	"strings"
-//	"fmt"
+	"fmt"
 
 )
 
@@ -21,7 +21,7 @@ const (
 type Server struct {
 	*ss.Server
 	store 				db.IStorage
-	Id 					string				`json:"id"`
+	Id 					string			`json:"id"`
 	CreateTime			utils.Time		`json:"create_at"`
 	UpdateTime			utils.Time		`json:"update_at"`
 }
@@ -40,7 +40,7 @@ func New(port, method, password string, limit, timeout int64 ,recorder db.IStora
 
 
 
-	server.initialize(recorder)
+	server.InitServer(recorder)
 
 	err = server.save()
 	return
@@ -53,11 +53,14 @@ func addPrefix(key, prefix string) string {
 	return prefix + key
 }
 //json ID
-func (self *Server) initialize(recorder db.IStorage) {
+func (self *Server) Initialize(recorder db.IStorage) (err error) {
+	err = self.Server.InitServer(recorder)
 	self.Id = uuid.NewV4().String()
 	self.store = recorder
 	self.upTime()
 	self.crTime()
+
+	return
 }
 
 //update time at Now
@@ -109,23 +112,25 @@ func GetServerFromRedis(store db.IStorage, port string) (server *Server, err err
 
 	server = &Server{}
 	err = json.Unmarshal(data, server)
+
 	if err != nil {
+
 		return
 	}
 
-	size, err := store.GetSize(flowPrefix + port)
-	if err == nil {
+	size, err := store.GetSize(addPrefix(port, flowPrefix))
+	if err != nil {
+		store.IncrSize(addPrefix(port, flowPrefix), 0)
 		server.Current = 0
 	} else {
+
 		server.Current = size
 	}
 
 
-	server.initialize(store)
+	server.Initialize(store)
 
-	server.SetRecorder(store)
-	err = server.InitServer()
-
+	fmt.Println(err)
 	return
 }
 
@@ -147,6 +152,8 @@ func GetServersFromRedis(store db.IStorage, ports ...string) (servers []*Server,
 
 func GetAllServersFromRedis(store db.IStorage) (servers []*Server, err error) {
 	keys, err := store.Keys(serverPrefix + "**")
+
+
 	if err != nil {
 		return
 	}
@@ -156,6 +163,7 @@ func GetAllServersFromRedis(store db.IStorage) (servers []*Server, err error) {
 			servers = append(servers, server)
 		} else {
 			err = er
+
 			return
 		}
 	}

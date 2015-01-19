@@ -5,10 +5,9 @@ import (
 )
 
 type ShadowsocksServer interface {
-	//initialize function
-	InitServer() error
+	//initialize function with db to recorder flow
+	InitServer(db.IStorage) error
 
-	SetRecorder(db.IStorage)
 	//json text
 	JSON() (string, error)
 

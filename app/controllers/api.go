@@ -8,27 +8,32 @@ import (
 	"fmt"
 
 )
-
-type API struct {
+var (
+	Store db.IStorage
 	SM *manager.Manager
-}
+)
 
-func New(redisHost, redisPWD string) (api *API) {
+
+
+
+func Initialize(redisHost, redisPWD string) {
 
 	store := db.NewStorage(redisHost, redisPWD)
 	fmt.Println(redisHost, redisPWD)
 	//do some to initialize
 	//create a manager (first arg -> show debug)
-	api = &API{}
-	api.SM = manager.NewManager()
+
+	SM = manager.NewManager()
+	Store = store
 
 	servers, err := models.GetAllServersFromRedis(store)
 	if err != nil {
 		utils.Debug(err)
 	}
 
+
 	for _, server := range servers {
-		api.SM.AddServerToManager(server)
+		SM.AddServerToManager(server)
 	}
 
 
@@ -36,8 +41,7 @@ func New(redisHost, redisPWD string) (api *API) {
 }
 
 
-func (self *API) NewServerAPI() *ServerAPI {
+func NewServerAPI() *ServerAPI {
 	return &ServerAPI{
-		SM: self.SM,
 	}
 }

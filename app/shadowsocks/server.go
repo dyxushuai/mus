@@ -67,7 +67,7 @@ func NewServer(port, method, password string, limit, timeout int64 ,recorder db.
 		recorder: recorder,
 	}
 
-	err = server.InitServer()
+	err = server.InitServer(recorder)
 	return
 }
 
@@ -173,11 +173,12 @@ func (self *Server) handleConnect(conn net.Conn) (flow int, err error) {
 
 
 //interface
-func (self *Server) InitServer() (err error) {
+func (self *Server) InitServer(recorder db.IStorage) (err error) {
 
 	self.comChan = make(ComChan)
 	self.local =  make(map[string]*local)
 	self.Started = false
+	self.recorder = recorder
 
 	errFormat := fmt.Sprintf(serverFormat, self.Port)
 
@@ -200,10 +201,7 @@ func (self *Server) InitServer() (err error) {
 	return
 }
 
-func (self *Server) SetRecorder(recorder db.IStorage) {
 
-	self.recorder = recorder
-}
 
 
 
