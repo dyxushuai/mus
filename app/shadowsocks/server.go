@@ -14,7 +14,7 @@ import (
 
 //server config
 const (
-	//format output
+	//format output for err message
 	serverFormat string = "proxy server at port %s : %%s %%v"
 	//command for loop
 	NULL int = iota
@@ -46,7 +46,7 @@ type Server struct {
 	recorder		db.IStorage
 	listener      	net.Listener
 	comChan       	ComChan          	//command channel
-	local		  	map[string]*local //1 to 1 : remote addr -> local
+	local		  	map[string]*local   //1 to 1 : remote addr -> local
 	format        	string
 	cipher        	*ss.Cipher
 }
