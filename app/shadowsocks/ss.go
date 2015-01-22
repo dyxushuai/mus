@@ -7,7 +7,14 @@ import (
 )
 
 
-func New(addr, method, encrStr string, timeout time.Duration, fn func(*int))(server *ss.ProxyServer, err error) {
+type Proxyer interface {
+	Listen()
+	IsStopped() bool
+	Stop()
+	SetCallbacks(ss.CallbackInterface)
+}
+
+func New(addr, method, encrStr string, timeout time.Duration, fn func(*int))(server Proxyer, err error) {
 	config := &ss.ProxyConfig{
 		Addr: addr,
 		Method: method,
@@ -16,9 +23,9 @@ func New(addr, method, encrStr string, timeout time.Duration, fn func(*int))(ser
 	}
 	server, err = ss.New(config)
 
-	server.CallbackMethods = &traffic{
+	server.SetCallbacks(&traffic{
 		recordFunc: fn,
-	}
+	})
 
 	return
 }

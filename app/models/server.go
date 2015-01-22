@@ -2,7 +2,7 @@ package models
 
 import (
 	"github.com/JohnSmithX/mus/app/utils"
-	"github.com/JohnSmithX/mus/app/db"
+	"github.com/garyburd/redigo/redis"
 	ss "github.com/JohnSmithX/mus/app/shadowsocks"
 	"encoding/json"
 	uuid "github.com/satori/go.uuid"
@@ -10,6 +10,7 @@ import (
 	"strings"
 	"fmt"
 
+	"github.com/Lupino/shadowsocks-auth/server"
 )
 
 //for redis key string
@@ -18,12 +19,39 @@ const (
 	flowPrefix = "mus:flow:"
 )
 
-type Server struct {
+var (
+	rdPool *redis.Pool
+)
 
-	store 				db.IStorage
+func NewRdPool(server, password string) (p *redis.Pool) {
+	p = &redis.Pool{
+		MaxIdle: 3,
+		IdleTimeout: 240 * time.Second,
+		Dial: func () (redis.Conn, error) {
+			c, err := redis.Dial("tcp", server)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := c.Do("AUTH", password); err != nil {
+				c.Close()
+				return nil, err
+			}
+			return c, err
+		},
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
+	}
+
+	return
+}
+
+type Server struct {
 	Id 					string			`json:"id"`
 	CreateTime			utils.Time		`json:"create_at"`
 	UpdateTime			utils.Time		`json:"update_at"`
+
 }
 
 func New(port, method, password string, limit, timeout int64 ,recorder db.IStorage) (server *Server,err error) {

@@ -7,10 +7,10 @@ import (
 	"github.com/oxtoacart/bpool"
 	"net"
 	"io"
-	"time"
 	"encoding/binary"
 	"strconv"
 	"syscall"
+
 )
 
 const (
@@ -60,22 +60,23 @@ func (c *client) rListen() {
 	for {
 		n, err := c.remote.Conn.Read(buf)
 
+		if n > 0 {
+			flow += n
+			c.server.CallbackMethods.RemoteNewData(c, buf[:n])
+		}
+
 		if err != nil {
 			c.server.CallbackMethods.RemoteConnClosed(c, err)
 			return
 		}
 
-		if n > 0 {
-			flow += n
-			c.server.CallbackMethods.RemoteNewData(c, buf[:n])
-		}
+
 
 	}
 }
 
 func (c *client) newRemote(conn net.Conn) {
 
-	conn.SetDeadline(time.Now().Add(c.server.config.Timeout * time.Second))
 	c.remote = &remote{
 		Conn: conn,
 	}
@@ -157,8 +158,6 @@ func (c *client) parse() (conn net.Conn, extra []byte, err error) {
 
 
 func (c *client) listen() {
-	defer c.Conn.Close()
-
 
 	conn, extra, err := c.parse()
 
@@ -180,16 +179,19 @@ func (c *client) listen() {
 
 	for {
 		n, err := c.Conn.Read(buf)
+
+		if n > 0 {
+			flow += n
+			c.server.CallbackMethods.ClientNewData(c, buf[:n])
+		}
+
 		if err != nil {
 			c.server.CallbackMethods.ClientConnClosed(c, err)
 			return
 		}
 
 
-		if n > 0 {
-			flow += n
-			c.server.CallbackMethods.ClientNewData(c, buf[:n])
-		}
+
 	}
 }
 

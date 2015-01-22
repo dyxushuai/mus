@@ -6,6 +6,7 @@ import (
 	"sync"
 	"log"
 	"github.com/dropbox/godropbox/errors"
+	"io"
 )
 
 
@@ -27,9 +28,16 @@ func (t *traffic) doWithLock(fn func()) {
 }
 
 func (t *traffic) NewClient(c lib.SSClienter) {}
-func (t *traffic) ClientConnClosed(c lib.SSClienter, err error){}
+
+func (t *traffic) ClientConnClosed(c lib.SSClienter, err error){
+	//err => EOF | i/o timeout
+	log.Println(errors.New(err.Error()))
+}
 func (t *traffic) NewRemote(c lib.SSClienter){}
-func (t *traffic) RemoteConnClosed(c lib.SSClienter, err error){}
+
+func (t *traffic) RemoteConnClosed(c lib.SSClienter, err error){
+	c.Close()
+}
 
 
 func (t *traffic) ClientNewData(c lib.SSClienter, data []byte) {
@@ -37,13 +45,18 @@ func (t *traffic) ClientNewData(c lib.SSClienter, data []byte) {
 	_, err := c.Remote().Write(data)
 	if err != nil {
 		log.Println(errors.New(err.Error()))
+		c.Remote().Close()
 	}
 }
 
 func (t *traffic) RemoteNewData(c lib.SSClienter, data []byte) {
+
 	_, err := c.Write(data)
 	if err != nil {
-		log.Println(errors.New(err.Error()))
+		if err != io.ErrClosedPipe {
+			log.Println(errors.New(err.Error()))
+		}
+		c.Close()
 	}
 }
 

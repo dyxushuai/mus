@@ -63,7 +63,7 @@ type ProxyServer struct {
 
 func (s *ProxyServer) newClient(conn net.Conn) {
 
-	conn.SetDeadline(time.Now().Add(s.config.Timeout * time.Second))
+	conn.SetReadDeadline(time.Now().Add(s.config.Timeout * time.Second))
 
 	client := &client{
 		Conn:   ss.NewConn(conn, s.Cip.Copy()),
@@ -118,7 +118,13 @@ func (s *ProxyServer) Listen() {
 	}
 }
 
+func (s *ProxyServer) IsStopped() bool {
+	return s.Stopped
+}
 
+func (s *ProxyServer) SetCallbacks(cb CallbackInterface) {
+	s.CallbackMethods = cb
+}
 
 func New(conf *ProxyConfig) (ps *ProxyServer, err error) {
 	ps = &ProxyServer{
