@@ -3,12 +3,14 @@ package lib
 
 import (
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
+	"github.com/dropbox/godropbox/errors"
 	"github.com/oxtoacart/bpool"
-	"bufio"
 	"net"
-	"bytes"
 	"io"
-
+	"time"
+	"encoding/binary"
+	"strconv"
+	"syscall"
 )
 
 const (
@@ -31,69 +33,59 @@ var (
 )
 
 
-type Client struct {
-	conn 		*ss.Conn
-	buf			func() []byte
-	Server 		*ProxyServer
+type SSClienter interface {
+	net.Conn
+	Remote() net.Conn
 }
 
-
-func Get() []byte {
-	return bytePool.Get()
+type client struct {
+	*ss.Conn
+	server 		*ProxyServer
+	remote		*remote
 }
 
-func (c *Client) Close() error {
-	c.buf
+type remote struct {
+	net.Conn
 }
 
-func (c *Client) listen() {
-	reader := bufio.NewReader(c.conn)
+func (c *client) rListen() {
+	defer c.remote.Conn.Close()
+
+	buf := bytePool.Get()
+	defer bytePool.Put(buf)
+
+	flow := 0
+	defer c.server.CallbackMethods.Record(&flow)
+
 	for {
-		data, err := reader.ReadBytes('\n')
+		n, err := c.remote.Conn.Read(buf)
+
 		if err != nil {
-			c.conn.Close()
-			c.Server.onClientConnClosed(c, err)
+			c.server.CallbackMethods.RemoteConnClosed(c, err)
 			return
 		}
-		c.Server.onNewMessage(c, data)
+
+		if n > 0 {
+			flow += n
+			c.server.CallbackMethods.RemoteNewData(c, buf[:n])
+		}
+
 	}
 }
 
+func (c *client) newRemote(conn net.Conn) {
 
-func (c *Client) Parse(buf []byte) {
-	switch buf[idType] {
-	case typeIPv4:
-		reqLen = lenIPv4
-	case typeIPv6:
-		reqLen = lenIPv6
-	case typeDm:
-		reqLen = int(buf[idDmLen]) + lenDmBase
-	default:
-		err = utils.NewError(self.father.format, "type of request address is not supported", string(buf[idType]))
-		return
+	conn.SetDeadline(time.Now().Add(c.server.config.Timeout * time.Second))
+	c.remote = &remote{
+		Conn: conn,
 	}
+	go c.rListen()
+	c.server.CallbackMethods.NewRemote(c)
 }
 
+func (c *client) parse() (conn net.Conn, extra []byte, err error) {
 
-
-
-func (self *client) getRemote() (rt *remote, err error) {
-	const (
-		idType  = 0 // address type index
-		idIP0   = 1 // ip addres start index
-		idDmLen = 1 // domain address length index
-		idDm0   = 2 // domain address start index
-
-		typeIPv4 = 1 // type is ipv4 address
-		typeDm   = 3 // type is domain address
-		typeIPv6 = 4 // type is ipv6 address
-
-		lenIPv4   = 1 + net.IPv4len + 2 // 1addrType + ipv4 + 2port
-		lenIPv6   = 1 + net.IPv6len + 2 // 1addrType + ipv6 + 2port
-		lenDmBase = 1 + 1 + 2           // 1addrType + 1addrLen + 2port, plus addrLen
-	)
 	var (
-		extra []byte
 		ip string
 		port string
 		host string
@@ -104,15 +96,13 @@ func (self *client) getRemote() (rt *remote, err error) {
 	buf := make([]byte, 260)
 
 	// read till we get possible domain length field
-	self.setTimeOut()
-	n, err := io.ReadAtLeast(self, buf, idDmLen+1)
 
+	n, err := io.ReadAtLeast(c.Conn, buf, idDmLen+1)
 
 	if err != nil {
-		err = utils.NewError(self.father.format, "read domain form client error:", err)
+		err = errors.Newf("read domain form client error: %v", err)
 		return
 	}
-
 	reqLen := -1
 	switch buf[idType] {
 	case typeIPv4:
@@ -122,13 +112,12 @@ func (self *client) getRemote() (rt *remote, err error) {
 	case typeDm:
 		reqLen = int(buf[idDmLen]) + lenDmBase
 	default:
-		err = utils.NewError(self.father.format, "type of request address is not supported", string(buf[idType]))
+		err = errors.Newf("type of request (%s) address is not supported", string(buf[idType]))
 		return
 	}
 	if n < reqLen { // rare case
-		self.setTimeOut()
-		if _, err = io.ReadFull(self, buf[n:reqLen]); err != nil {
-			err = utils.NewError(self.father.format, "read addr form client error:", err)
+		if _, err = io.ReadFull(c.Conn, buf[n:reqLen]); err != nil {
+			err = errors.Newf("read addr form client error: %v", err)
 			return
 		}
 	} else if n > reqLen {
@@ -150,20 +139,61 @@ func (self *client) getRemote() (rt *remote, err error) {
 	port = strconv.Itoa(int(binary.BigEndian.Uint16(buf[reqLen-2 : reqLen])))
 	host = net.JoinHostPort(ip, port)
 	// tcp to remote
-	conn, err := net.Dial("tcp", host)
+	conn, err = net.Dial("tcp", host)
 
 	if err != nil {
 		if ne, ok := err.(*net.OpError); ok && (ne.Err == syscall.EMFILE || ne.Err == syscall.ENFILE) {
 			// log too many open file error
 			// EMFILE is process reaches open file limits, ENFILE is system limit
-			err = utils.NewError(self.father.format, "dial error:", err)
+			err = errors.Newf("get remote dial error: %v", err)
 		} else {
-			err = utils.NewError(self.father.format, "error connecting to: " + host, err)
+			err = errors.Newf("error connecting to remote: %s %v",  host, err)
 		}
 		return
 	}
 
-	rt = &remote{conn, host, ip, port, extra, false, self.father}
-	err = rt.checkMethod()
 	return
+}
+
+
+func (c *client) listen() {
+	defer c.Conn.Close()
+
+
+	conn, extra, err := c.parse()
+
+	if  err != nil {
+		return
+	}
+	
+	c.newRemote(conn)
+
+	flow := 0
+	defer c.server.CallbackMethods.Record(&flow)
+
+	if extra != nil && len(extra) != 0 {
+		c.server.CallbackMethods.ClientNewData(c, extra )
+	}
+	
+	buf := bytePool.Get()
+	defer bytePool.Put(buf)
+
+	for {
+		n, err := c.Conn.Read(buf)
+		if err != nil {
+			c.server.CallbackMethods.ClientConnClosed(c, err)
+			return
+		}
+
+
+		if n > 0 {
+			flow += n
+			c.server.CallbackMethods.ClientNewData(c, buf[:n])
+		}
+	}
+}
+
+
+func (c *client) Remote() net.Conn {
+	return c.remote
 }

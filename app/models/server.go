@@ -19,7 +19,7 @@ const (
 )
 
 type Server struct {
-	*ss.Server
+
 	store 				db.IStorage
 	Id 					string			`json:"id"`
 	CreateTime			utils.Time		`json:"create_at"`

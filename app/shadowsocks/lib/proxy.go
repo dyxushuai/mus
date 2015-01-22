@@ -4,43 +4,24 @@ import (
 	"net"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"log"
+	"time"
+	"github.com/dropbox/godropbox/errors"
 )
 
 
-//
-type NewClientHandler interface {
-	Handle(c *Client)
+type CallbackInterface interface {
+	//client event
+	NewClient(c SSClienter)
+	ClientConnClosed(c SSClienter, err error)
+	ClientNewData(c SSClienter, data []byte)
+	//remote event
+	NewRemote(c SSClienter)
+	RemoteConnClosed(c SSClienter, err error)
+	RemoteNewData(c SSClienter, data []byte)
+
+	Record(i *int)
 }
 
-type NewClientHandlerFunc func(c *Client)
-
-func (nc NewClientHandlerFunc) Handle(c *Client) {
-	nc(c)
-}
-
-
-//
-type ClientConnClosedHandler interface {
-	Handle(c *Client, err error)
-}
-
-type ClientConnClosedHandlerFunc func(c *Client, err error)
-
-func (nc ClientConnClosedHandlerFunc) Handle(c *Client, err error) {
-	nc(c, err)
-}
-
-
-//
-type NewDataHandler interface {
-	Handle(c *Client, data []byte)
-}
-
-type NewDataHandlerFunc func(c *Client, data []byte)
-
-func (nc NewDataHandlerFunc) Handle(c *Client, data []byte) {
-	nc(c, data)
-}
 
 
 //the struct of config for proxy
@@ -53,89 +34,101 @@ type ProxyConfig struct {
 
 	//encrypted method
 	Method string
+
+	//read and write timeout
+	//second
+	Timeout time.Duration
 }
 
 //shadowsocks server
 type ProxyServer struct {
-	ln net.Listener
+	ln 						net.Listener
 
 	config 					*ProxyConfig
 
 	// cipher
-	Cip *ss.Cipher
+	Cip 					*ss.Cipher
+
+	stop      				chan bool
+	Stopped   				bool
 
 	joins                   chan net.Conn
 
-	onNewClientCallback     NewClientHandler
-	onClientConnClosed 		ClientConnClosedHandler
-	onNewData            NewDataHandler
+	CallbackMethods			CallbackInterface
 }
 
 
-func (s *ProxyServer) OnNewClient(callback NewClientHandler) {
-	s.onNewClientCallback = callback
-}
 
-
-func (s *ProxyServer) OnClientConnClosed(callback ClientConnClosedHandler) {
-	s.onClientConnClosed = callback
-}
-
-
-func (s *ProxyServer) OnNewData(callback NewDataHandler) {
-	s.onNewData = callback
-}
 
 
 func (s *ProxyServer) newClient(conn net.Conn) {
 
+	conn.SetDeadline(time.Now().Add(s.config.Timeout * time.Second))
 
-	client := &Client{
-		conn:   ss.NewConn(conn, s.Cip.Copy()),
-		Server: s,
+	client := &client{
+		Conn:   ss.NewConn(conn, s.Cip.Copy()),
+		server: s,
 	}
+
 	go client.listen()
-	s.onNewClientCallback(client)
+	s.CallbackMethods.NewClient(client)
 }
 
 func (s *ProxyServer) listenChannels() {
+	defer func() {
+		recover()
+	}()
 	for {
 		select {
 		case conn := <-s.joins:
 			s.newClient(conn)
+		case b := <-s.stop:
+
+			if b {
+				if !s.Stopped {
+					s.Stopped = true
+					s.ln.Close()
+					return
+				}
+			}
 		}
 	}
 }
 
+func (s *ProxyServer) Stop() {
 
+	s.stop <-true
+}
 
 func (s *ProxyServer) Listen() {
 	go s.listenChannels()
 
+	s.Stopped = false
+
 	listener, err := net.Listen("tcp", s.config.Addr)
 	if err != nil {
-		log.Fatal("Error starting TCP server.")
+		log.Printf("Error starting TCP server. %v", err)
+		return
 	}
 	defer listener.Close()
 
 	for {
 		conn, _ := listener.Accept()
-		s.joins <- conn
+		s.joins <-conn
 	}
 }
 
 
 
-func New(conf *ProxyConfig) *ProxyServer {
-	server := &ProxyServer{
+func New(conf *ProxyConfig) (ps *ProxyServer, err error) {
+	ps = &ProxyServer{
 		config: conf,
 		joins:   make(chan net.Conn),
+		stop:    make(chan bool),
 	}
-
-	server.Cip = ss.NewCipher(conf.Method, conf.EncrStr)
-	server.OnNewClient(func(c *Client) {})
-	server.OnNewData(func(c *Client, data []byte) {})
-	server.OnClientConnClosed(func(c *Client, err error) {})
-
-	return server
+	ps.Cip, err = ss.NewCipher(conf.Method, conf.EncrStr)
+	if err != nil {
+		err = errors.Newf("create cipher error: %v", err)
+	}
+	return
 }
