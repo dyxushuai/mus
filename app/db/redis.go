@@ -7,7 +7,6 @@ import (
 )
 
 const (
-	PREFIX = "mus:"
 	Hour = iota
 	Day
 	Month
@@ -85,56 +84,46 @@ func (self *Storage) getKeyBy(k int, id string) (key string) {
 	return
 }
 
+
+
 func (self *Storage) Keys(pat string) (keys []string, err error) {
 	keys, err = redis.Strings(self.doWithConn("KEYS", pat))
 	return
 }
 
-func (self *Storage) GetServer(key string) (data []byte, err error) {
+func (self *Storage) GetStr(key string) (data []byte, err error) {
 	data, err = redis.Bytes(self.doWithConn("GET", key))
 	return
 }
 
-//pat -> "server:**" will get all exsited servers
-func (self *Storage) GetServers(pat string) (datas [][]byte, err error) {
-	keys, err := self.Keys(pat)
-	if err != nil {
-		return
-	}
-	for _, key := range keys {
-		if data, err := self.GetServer(key); err == nil {
-			datas = append(datas, data)
-		}
-	}
+func (self *Storage) GetNum(key string) (score int64, err error) {
+	score, err = redis.Int64(self.doWithConn("GET", key))
 	return
 }
 
-func (self *Storage) SetServer(key string, data []byte) (err error) {
+func (self *Storage) Set(key string, data []byte) (err error) {
 	_, err = self.doWithConn("SET", key, data)
 	return
 }
 
-func (self *Storage) DelServer(key string) (err error) {
+func (self *Storage) Del(key string) (err error) {
 	_, err = self.doWithConn("DEL", key)
 	return
 }
 
-func (self *Storage) IncrSize(key string, incr int) (score int64, err error) {
+func (self *Storage) Incr(key string, incr int) (score int64, err error) {
 	score, err = redis.Int64(self.doWithConn("INCRBY", key, incr))
 	return
 }
 
-func (self *Storage) GetSize(key string) (score int64, err error) {
-	score, err = redis.Int64(self.doWithConn("GET", key))
-	return
-}
+
 
 func (self *Storage) IncreaseByHour(port string, incr int) (score int64, err error) {
 	key := self.getKeyBy(Hour, port)
 	if key != "" {
 		return
 	}
-	score, err = self.IncrSize(key, incr)
+	score, err = self.Incr(key, incr)
 	return
 }
 
@@ -143,7 +132,7 @@ func (self *Storage) IncreaseByDay(port string, incr int) (score int64, err erro
 	if key != "" {
 		return
 	}
-	score, err = self.IncrSize(key, incr)
+	score, err = self.Incr(key, incr)
 	return
 }
 
@@ -152,7 +141,7 @@ func (self *Storage) IncreaseByMonth(port string, incr int) (score int64, err er
 	if key != "" {
 		return
 	}
-	score, err = self.IncrSize(key, incr)
+	score, err = self.Incr(key, incr)
 	return
 }
 
@@ -161,6 +150,6 @@ func (self *Storage) IncreaseByYear(port string, incr int) (score int64, err err
 	if key != "" {
 		return
 	}
-	score, err = self.IncrSize(key, incr)
+	score, err = self.Incr(key, incr)
 	return
 }

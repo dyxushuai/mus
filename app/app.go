@@ -15,15 +15,19 @@ func Serve(redisHost, redisPWD string) {
 	server.Use(logger.New())
 	server.Use(methodoverride.New())
 
-	controllers.Initialize(redisHost, redisPWD)
+	controllers.NewAPI(redisHost, redisPWD)
 
-	server.Get("/api/servers", utils.JsonView(controllers.NewServerAPI().Index))
-	//	server.Post("/api/servers", "create new")
+	serverAPI := controllers.NewServerAPI()
 
-	server.Get("/api/servers/:id", utils.JsonView(controllers.NewServerAPI().Show))
-	server.Del("/api/servers/:id",utils.JsonView(controllers.NewServerAPI().Destroy))
-	//	server.Put("/api/servers/:id", "update :id server")
-	//
+	server.Get("/api/servers", utils.JsonView(serverAPI.Index))
+	server.Post("/api/servers", utils.JsonView(serverAPI.Create))
+
+	server.Get("/api/servers/:id", utils.JsonView(serverAPI.Show))
+	server.Del("/api/servers/:id", utils.JsonView(serverAPI.Destroy))
+	server.Put("/api/servers/:id", utils.JsonView(serverAPI.Update))
+
+
+
 	//	server.Post("/api/servers/:id/start", "start :id server")
 	//	server.Post("/api/servers/:id/stop", "stop :id server")
 	//	server.Post("/api/servers/:id/restart", "restart :id server")

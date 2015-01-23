@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"strconv"
 	"syscall"
+	"sync"
 )
 
 const (
@@ -38,6 +39,7 @@ type SSClienter interface {
 }
 
 type client struct {
+	mu 			sync.Mutex
 	*ss.Conn
 	server 		*ProxyServer
 	remote		*remote
@@ -45,14 +47,30 @@ type client struct {
 }
 
 type remote struct {
+	mu sync.Mutex
 	net.Conn
 	closed		bool
+}
+
+func (c *client) doWithLock(fn func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	fn()
+}
+
+func (r *remote) doWithLock(fn func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	fn()
 }
 
 func (r *remote) Close() (err error) {
 	if !r.closed {
 		err = r.Conn.Close()
-		r.closed = true
+		r.doWithLock(func() {
+			r.closed = true
+		})
+
 	}
 	return
 }
@@ -75,7 +93,9 @@ func (r *remote) Read(b []byte) (n int, err error) {
 func (c *client) Close() (err error) {
 	if !c.closed {
 		err = c.Conn.Conn.Close()
-		c.closed = true
+		c.doWithLock(func() {
+			c.closed = true
+		})
 	}
 	return
 }

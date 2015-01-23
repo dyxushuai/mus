@@ -2,15 +2,16 @@ package models
 
 import (
 	"github.com/JohnSmithX/mus/app/utils"
-	"github.com/garyburd/redigo/redis"
+	"github.com/JohnSmithX/mus/app/db"
 	ss "github.com/JohnSmithX/mus/app/shadowsocks"
 	"encoding/json"
 	uuid "github.com/satori/go.uuid"
 	"time"
 	"strings"
-	"fmt"
 
-	"github.com/Lupino/shadowsocks-auth/server"
+	"github.com/dropbox/godropbox/errors"
+	"sync"
+
 )
 
 //for redis key string
@@ -20,57 +21,57 @@ const (
 )
 
 var (
-	rdPool *redis.Pool
+	rdPool *db.Storage
 )
 
-func NewRdPool(server, password string) (p *redis.Pool) {
-	p = &redis.Pool{
-		MaxIdle: 3,
-		IdleTimeout: 240 * time.Second,
-		Dial: func () (redis.Conn, error) {
-			c, err := redis.Dial("tcp", server)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := c.Do("AUTH", password); err != nil {
-				c.Close()
-				return nil, err
-			}
-			return c, err
-		},
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			return err
-		},
-	}
-
-	return
+type ServerI interface {
+	Update() (err error)
+	Delete() (err error)
+	JSON() (result []byte, err error)
+	IsStopped() bool
+	Stop()
+	Start()
+	Key() string
 }
+
 
 type Server struct {
-	Id 					string			`json:"id"`
+	mu   				sync.Mutex
+	proxy				ss.Proxyer
+
+	//current flow
+	current       		int64
+
+	Id 					uuid.UUID		`json:"id"`
 	CreateTime			utils.Time		`json:"create_at"`
 	UpdateTime			utils.Time		`json:"update_at"`
-
+	Port 				string			`json:"port"`
+	Method       		string       	`json:"method"`
+	Password      		string       	`json:"password"`
+	Limit         		int64        	`json:"limit"`
+	Timeout       		int64        	`json:"timeout"`
 }
 
-func New(port, method, password string, limit, timeout int64 ,recorder db.IStorage) (server *Server,err error) {
-	if port == "" {
-		err = utils.NewError("Cannot create a server without port")
-		return
-	}
+func InitDb(serverHost, serverPassword string) {
+	rdPool = db.NewStorage(serverHost, serverPassword)
+}
 
+func New(port, method, password string, limit, timeout int64) (server *Server,err error) {
+	
 	server = &Server{}
-	server.Server, err = ss.NewServer(port, method, password, limit, timeout, recorder)
+
+	server.proxy, err = ss.New(":" + port, method, password, time.Duration(timeout), func(int){})
 	if err != nil {
+		err = errors.New(err.Error())
 		return
 	}
-
-
-
-	server.InitServer(recorder)
-
-	err = server.save()
+	server.Port = port
+	server.Method = method
+	server.Password = password
+	server.Limit = limit
+	server.Timeout = timeout
+	err = server.initialize()
+	
 	return
 }
 
@@ -80,13 +81,50 @@ func addPrefix(key, prefix string) string {
 	}
 	return prefix + key
 }
-//json ID
-func (self *Server) Initialize(recorder db.IStorage) (err error) {
-	err = self.Server.InitServer(recorder)
-	self.Id = uuid.NewV4().String()
-	self.store = recorder
+
+func (self *Server) serverKey() string {
+	return addPrefix(self.Port, serverPrefix)
+}
+
+func (self *Server) flowKey() string {
+	return addPrefix(self.Port, flowPrefix)
+}
+
+func (self *Server) initialize() (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.New(err.Error())
+		}
+	}()
+	self.Id = uuid.NewV4()
 	self.upTime()
 	self.crTime()
+	err = self.save()
+	if err != nil {
+		return
+	}
+	_, err = self.getCurrent()
+	return
+}
+
+func (self *Server) doWithLock(fn func()) {
+	self.mu.Lock()
+	defer self.mu.Unlock()
+	fn()
+}
+
+func (self *Server) getCurrent() (n int64, err error){
+	n, err = rdPool.GetNum(self.flowKey())
+	if err != nil {
+		err = errors.New(err.Error())
+		self.doWithLock(func(){
+			self.current = 0
+		})
+		return
+	}
+	self.doWithLock(func(){
+		self.current = n
+	})
 
 	return
 }
@@ -103,7 +141,17 @@ func (self *Server) crTime() {
 
 
 func (self *Server) save() (err error) {
-	err = AddServerToRedis(self.store, self)
+
+	defer func() {
+		if err != nil {
+			err = errors.New(err.Error())
+		}
+	}()
+	data, err := json.Marshal(self)
+	if err != nil {
+		return
+	}
+	err = rdPool.Set(self.serverKey(), data)
 	return
 }
 
@@ -115,23 +163,41 @@ func (self *Server) Update() (err error) {
 }
 
 func (self *Server) Delete() (err error) {
-	err = DelServerFromRedis(self.store, self.Port)
+	err = rdPool.Del(self.serverKey())
+	err = rdPool.Del(self.flowKey())
+	self.Stop()
 	return
 }
 
 func (self *Server) JSON() (result []byte, err error) {
-	data, err := json.Marshal(self)
-	if err != nil {
-		return
-	}
-	result = data
+	result, err = json.Marshal(self)
 	return
 }
 
+func (self *Server) IsStopped() bool {
+	return self.proxy.IsStopped()
+}
+
+func (self *Server) Stop() {
+	if self.IsStopped() {
+		return
+	}
+	self.proxy.Stop()
+}
+
+func (self *Server) Start() {
+	if self.IsStopped() {
+		self.proxy.Listen()
+	}
+}
+
+func (self *Server) Key() string {
+	return self.Port
+}
 
 //operate servers from redis
-func GetServerFromRedis(store db.IStorage, port string) (server *Server, err error) {
-	data, err :=  store.GetServer(addPrefix(port, serverPrefix))
+func GetServerFromRedis(port string) (server *Server, err error) {
+	data, err :=  rdPool.GetStr(addPrefix(port, serverPrefix))
 
 	if err != nil {
 
@@ -146,29 +212,24 @@ func GetServerFromRedis(store db.IStorage, port string) (server *Server, err err
 		return
 	}
 
-	size, err := store.GetSize(addPrefix(port, flowPrefix))
+	size, _ := rdPool.GetNum(addPrefix(port, flowPrefix))
 	if err != nil {
-		store.IncrSize(addPrefix(port, flowPrefix), 0)
-		server.Current = 0
+		server.current = 0
 	} else {
-
-		server.Current = size
+		server.current = size
 	}
 
-
-	server.Initialize(store)
-
-	fmt.Println(err)
 	return
 }
 
-func GetServersFromRedis(store db.IStorage, ports ...string) (servers []*Server, err error) {
+func GetServersFromRedis( ports ...string) (servers []*Server, err error) {
 	if len(ports) == 0 {
-		err = utils.NewError("Need port but port is nil")
+		err = errors.New("Need port but port is nil")
 		return
 	}
+
 	for _, port := range ports {
-		if server, er := GetServerFromRedis(store, string(port)); er == nil {
+		if server, er := GetServerFromRedis(string(port)); er == nil {
 			servers = append(servers, server)
 		} else {
 			err = er
@@ -178,16 +239,21 @@ func GetServersFromRedis(store db.IStorage, ports ...string) (servers []*Server,
 	return
 }
 
-func GetAllServersFromRedis(store db.IStorage) (servers []*Server, err error) {
-	keys, err := store.Keys(serverPrefix + "**")
+func GetAllServersFromRedis() (servers []*Server, err error) {
 
+	defer func() {
+		if err != nil {
+			err = errors.New(err.Error())
+		}
+	}()
+	keys, err := rdPool.Keys(serverPrefix + "**")
 
 	if err != nil {
 		return
 	}
 	for _, key := range keys {
 
-		if server, er := GetServerFromRedis(store, key); er == nil {
+		if server, er := GetServerFromRedis(key); er == nil {
 			servers = append(servers, server)
 		} else {
 			err = er
@@ -198,52 +264,4 @@ func GetAllServersFromRedis(store db.IStorage) (servers []*Server, err error) {
 	return
 }
 
-func AddServerToRedis(store db.IStorage, server *Server) (err error) {
 
-	data, err := json.Marshal(server)
-	err = store.SetServer(serverPrefix + server.Port, data)
-	return
-}
-
-func AddServersToRedis(store db.IStorage, servers []*Server) (err error) {
-	for _, server := range servers {
-		err = AddServerToRedis(store, server)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func DelServerFromRedis(store db.IStorage, port string) (err error) {
-	err =  store.DelServer(serverPrefix + port)
-	return
-}
-
-func DelServersFromRedis(store db.IStorage, ports ...string) (err error) {
-	if len(ports) == 0 {
-		err = utils.NewError("Need port but port is nil")
-		return
-	}
-	for _, port := range ports {
-		err = DelServerFromRedis(store, string(port))
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func DelAllServersFromRedis(store db.IStorage, ) (err error) {
-	keys, err := store.Keys(serverPrefix + "**")
-	if err != nil {
-		return
-	}
-	for _, key := range keys {
-		err = store.DelServer(key)
-		if err != nil {
-			return
-		}
-	}
-	return
-}

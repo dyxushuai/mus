@@ -25,34 +25,17 @@ func (self *ServerAPI) Index(w http.ResponseWriter, r *http.Request) (json strin
 }
 
 
-//func (self *Manager) CreateServerFromBody(body io.Reader) (server models.IServer, err error) {
-//	decoder := json.NewDecoder(body)
-//	err = decoder.Decode(server)
-//	if err != nil {
-//		err = utils.NewError(err.Error())
-//		return
-//	}
-//	err = server.InitServer()
-//	if err != nil {
-//		return
-//	}
-//	err = self.AddServerToManager(server)
-//	if err != nil {
-//		return
-//	}
-//	err = self.AddServerToRedis(server)
-//	return
-//}
+
 //Post("/api/servers", "create new")
 func (self *ServerAPI) Create(w http.ResponseWriter, r *http.Request) (json string) {
-	server := &models.Server{}
+	opt := &models.Server{}
 
 	decoder := j.NewDecoder(r.Body)
 
 
-	err := decoder.Decode(server)
+	err := decoder.Decode(opt)
 
-	server.Initialize(Store)
+	server, err := models.New(opt.Port, opt.Method, opt.Password, opt.Limit, opt.Timeout)
 
 	err = SM.Create(server)
 	_ = err
@@ -93,6 +76,24 @@ func (self *ServerAPI) Destroy(w http.ResponseWriter, r *http.Request) (json str
 
 //Put("/api/servers/:id", "update :id server")
 func (self *ServerAPI) Update(w http.ResponseWriter, r *http.Request) (json string) {
+
+
+	params := r.URL.Query()
+	id := params.Get(":id")
+	server, err := SM.Show(id)
+	if err != nil {
+		return
+
+	}
+	opt := &models.Server{}
+
+	decoder := j.NewDecoder(r.Body)
+	err = decoder.Decode(opt)
+
+	server, err = models.New(opt.Port, opt.Method, opt.Password, opt.Limit, opt.Timeout)
+	err = server.Update()
+	err = SM.Create(server)
+	_ = err
 	return
 }
 

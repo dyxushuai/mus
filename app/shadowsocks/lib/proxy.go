@@ -5,6 +5,7 @@ import (
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"log"
 	"time"
+	"sync"
 	"github.com/dropbox/godropbox/errors"
 )
 
@@ -46,6 +47,8 @@ type ProxyConfig struct {
 
 //shadowsocks server
 type ProxyServer struct {
+	mu						sync.Mutex
+
 	ln 						net.Listener
 
 	config 					*ProxyConfig
@@ -63,7 +66,11 @@ type ProxyServer struct {
 
 
 
-
+func (s *ProxyServer) doWithLock(fn func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fn()
+}
 
 func (s *ProxyServer) newClient(conn net.Conn) {
 
@@ -87,17 +94,13 @@ func (s *ProxyServer) listenChannels() {
 		case conn := <-s.joins:
 			s.newClient(conn)
 		case b := <-s.stop:
-
 			if b {
-				if !s.Stopped {
-					s.Stopped = true
-					s.ln.Close()
-					return
-				}
+				return
 			}
 		}
 	}
 }
+
 
 func (s *ProxyServer) Stop() {
 
@@ -107,7 +110,10 @@ func (s *ProxyServer) Stop() {
 func (s *ProxyServer) Listen() {
 	go s.listenChannels()
 
-	s.Stopped = false
+	s.doWithLock(func() {
+		s.Stopped = false
+	})
+
 
 	listener, err := net.Listen("tcp", s.config.Addr)
 	if err != nil {
@@ -117,13 +123,30 @@ func (s *ProxyServer) Listen() {
 	defer listener.Close()
 
 	for {
+		select {
+		case b := <-s.stop:
+			if b {
+				if !s.Stopped {
+					s.doWithLock(func() {
+						s.Stopped = true
+					})
+					return
+				}
+
+			}
+		default:
+		}
 		conn, _ := listener.Accept()
 		s.joins <-conn
+
 	}
 }
 
-func (s *ProxyServer) IsStopped() bool {
-	return s.Stopped
+func (s *ProxyServer) IsStopped() (b bool) {
+	s.doWithLock(func() {
+		b = s.Stopped
+	})
+	return
 }
 
 func (s *ProxyServer) SetCallbacks(cb CallbackInterface) {
@@ -135,6 +158,7 @@ func New(conf *ProxyConfig) (ps *ProxyServer, err error) {
 		config: conf,
 		joins:   make(chan net.Conn),
 		stop:    make(chan bool),
+		Stopped: true,
 	}
 	ps.Cip, err = ss.NewCipher(conf.Method, conf.EncrStr)
 	if err != nil {
