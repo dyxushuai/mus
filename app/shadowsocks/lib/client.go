@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"strconv"
 	"syscall"
-
 )
 
 const (
@@ -42,36 +41,85 @@ type client struct {
 	*ss.Conn
 	server 		*ProxyServer
 	remote		*remote
+	closed		bool
 }
 
 type remote struct {
 	net.Conn
+	closed		bool
+}
+
+func (r *remote) Close() (err error) {
+	if !r.closed {
+		err = r.Conn.Close()
+		r.closed = true
+	}
+	return
+}
+
+func (r *remote) Write(b []byte) (n int, err error) {
+	if !r.closed {
+		n, err = r.Conn.Write(b)
+	}
+	return
+}
+
+func (r *remote) Read(b []byte) (n int, err error) {
+	if !r.closed {
+		n, err = r.Conn.Read(b)
+	}
+	return
+}
+
+
+func (c *client) Close() (err error) {
+	if !c.closed {
+		err = c.Conn.Conn.Close()
+		c.closed = true
+	}
+	return
+}
+
+func (c *client) Write(b []byte) (n int, err error) {
+	if !c.closed {
+		n, err = c.Conn.Write(b)
+	}
+	return
+}
+
+func (c *client) Read(b []byte) (n int, err error) {
+	if !c.closed {
+		n, err = c.Conn.Read(b)
+	}
+	return
 }
 
 func (c *client) rListen() {
-	defer c.remote.Conn.Close()
+	defer c.remote.Close()
 
 	buf := bytePool.Get()
 	defer bytePool.Put(buf)
 
 	flow := 0
-	defer c.server.CallbackMethods.Record(&flow)
+	defer func() {
+		c.server.CallbackMethods.Record(flow)
+	}()
 
 	for {
-		n, err := c.remote.Conn.Read(buf)
+		n, err := c.remote.Read(buf)
 
 		if n > 0 {
 			flow += n
-			c.server.CallbackMethods.RemoteNewData(c, buf[:n])
+			e := c.server.CallbackMethods.RemoteNewData(c, buf[:n])
+			if e != nil {
+				return
+			}
 		}
 
 		if err != nil {
-			c.server.CallbackMethods.RemoteConnClosed(c, err)
+			c.server.CallbackMethods.RemoteReadErr(c, err)
 			return
 		}
-
-
-
 	}
 }
 
@@ -159,16 +207,19 @@ func (c *client) parse() (conn net.Conn, extra []byte, err error) {
 
 func (c *client) listen() {
 
-	conn, extra, err := c.parse()
+	conn, extra, er := c.parse()
 
-	if  err != nil {
+	if  er != nil {
 		return
 	}
 	
 	c.newRemote(conn)
 
 	flow := 0
-	defer c.server.CallbackMethods.Record(&flow)
+	defer func() {
+		c.server.CallbackMethods.Record(flow)
+	}()
+
 
 	if extra != nil && len(extra) != 0 {
 		c.server.CallbackMethods.ClientNewData(c, extra )
@@ -178,19 +229,21 @@ func (c *client) listen() {
 	defer bytePool.Put(buf)
 
 	for {
-		n, err := c.Conn.Read(buf)
+		n, err := c.Read(buf)
 
 		if n > 0 {
 			flow += n
-			c.server.CallbackMethods.ClientNewData(c, buf[:n])
+			e := c.server.CallbackMethods.ClientNewData(c, buf[:n])
+			if e != nil {
+				return
+			}
+
 		}
 
 		if err != nil {
-			c.server.CallbackMethods.ClientConnClosed(c, err)
+			c.server.CallbackMethods.ClientReadErr(c, err)
 			return
 		}
-
-
 
 	}
 }

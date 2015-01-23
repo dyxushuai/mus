@@ -12,14 +12,18 @@ import (
 type CallbackInterface interface {
 	//client event
 	NewClient(c SSClienter)
-	ClientConnClosed(c SSClienter, err error)
-	ClientNewData(c SSClienter, data []byte)
+
+	ClientReadErr(c SSClienter, err error)
+
+	ClientNewData(c SSClienter, data []byte) error
 	//remote event
 	NewRemote(c SSClienter)
-	RemoteConnClosed(c SSClienter, err error)
-	RemoteNewData(c SSClienter, data []byte)
 
-	Record(i *int)
+	RemoteReadErr(c SSClienter, err error)
+
+	RemoteNewData(c SSClienter, data []byte) error
+
+	Record(i int)
 }
 
 

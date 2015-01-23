@@ -14,7 +14,7 @@ type Proxyer interface {
 	SetCallbacks(ss.CallbackInterface)
 }
 
-func New(addr, method, encrStr string, timeout time.Duration, fn func(*int))(server Proxyer, err error) {
+func New(addr, method, encrStr string, timeout time.Duration, fn func(int))(server Proxyer, err error) {
 	config := &ss.ProxyConfig{
 		Addr: addr,
 		Method: method,
