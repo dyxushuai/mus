@@ -91,8 +91,12 @@ func (self *Storage) Keys(pat string) (keys []string, err error) {
 	return
 }
 
-func (self *Storage) GetStr(key string) (data []byte, err error) {
+func (self *Storage) GetByt(key string) (data []byte, err error) {
 	data, err = redis.Bytes(self.doWithConn("GET", key))
+	return
+}
+func (self *Storage) GetStr(key string) (str string, err error) {
+	str, err = redis.String(self.doWithConn("GET", key))
 	return
 }
 

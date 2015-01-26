@@ -24,6 +24,10 @@ var (
 	rdPool *db.Storage
 )
 
+func InitDb(store *db.Storage) {
+	rdPool = store
+}
+
 type ServerI interface {
 	Update() (err error)
 	Delete() (err error)
@@ -31,6 +35,7 @@ type ServerI interface {
 	IsStopped() bool
 	Stop()
 	Start()
+	Restart()
 	Key() string
 }
 
@@ -52,9 +57,6 @@ type Server struct {
 	Timeout       		int64        	`json:"timeout"`
 }
 
-func InitDb(serverHost, serverPassword string) {
-	rdPool = db.NewStorage(serverHost, serverPassword)
-}
 
 func New(port, method, password string, limit, timeout int64) (server *Server,err error) {
 	
@@ -185,6 +187,11 @@ func (self *Server) Stop() {
 	self.proxy.Stop()
 }
 
+func (self *Server) Restart() {
+	self.Stop()
+	self.Start()
+}
+
 func (self *Server) Start() {
 	if self.IsStopped() {
 		self.proxy.Listen()
@@ -197,7 +204,7 @@ func (self *Server) Key() string {
 
 //operate servers from redis
 func GetServerFromRedis(port string) (server *Server, err error) {
-	data, err :=  rdPool.GetStr(addPrefix(port, serverPrefix))
+	data, err :=  rdPool.GetByt(addPrefix(port, serverPrefix))
 
 	if err != nil {
 
